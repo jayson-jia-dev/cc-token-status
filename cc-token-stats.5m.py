@@ -650,17 +650,10 @@ def main():
     # ═══ 2. TODAY + trend comparison ═══
     if today["msgs"] > 0:
         print("---")
-        # 7d average (excluding today) for trend comparison
-        past_days = [(d, v) for d, v in daily_sorted if v["msgs"] > 0 and d != datetime.now().strftime("%Y-%m-%d")]
-        avg_cost = sum(v["cost"] for _, v in past_days[:7]) / max(len(past_days[:7]), 1) if past_days else 0
-        delta = ""
-        if avg_cost > 0:
-            pct_chg = (today["cost"] - avg_cost) / avg_cost * 100
-            delta = f"  {'↑' if pct_chg >= 0 else '↓'}{abs(pct_chg):.0f}% vs 7d"
         if ZH:
-            print(f"⚡ 今日：{fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} 条{delta} | {SEC}")
+            print(f"⚡ 今日：{fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} 条 | {SEC}")
         else:
-            print(f"⚡ Today: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} msgs{delta} | {SEC}")
+            print(f"⚡ Today: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} msgs | {SEC}")
         if ZH:
             print(f"--输入: {tk(today['inp'])}   输出: {tk(today['out'])} | {DIM}")
             print(f"--缓存写: {tk(today['cw'])}   缓存读: {tk(today['cr'])} | {DIM}")
