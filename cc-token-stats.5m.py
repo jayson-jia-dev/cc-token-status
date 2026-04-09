@@ -717,15 +717,13 @@ def main():
     SH = "color=#5CC6A7 size=12" if DARK else "color=#1A5C4C size=12"
 
     # ── 7-Day Trend ──
-    max_cost = max((v["cost"] for v in daily.values()), default=1) or 1
     print(f"{'最近 7 天' if ZH else 'Last 7 Days'} | {SH}")
     for date, data in daily.items():
         dd = date[5:]
-        b = bar(data["cost"], max_cost, 8)
         if data["msgs"] > 0:
-            print(f"--{dd}   {fc(data['cost']):>8}   {b}   {data['msgs']:>4} msgs | {ROW2}")
+            print(f"--{dd}   {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
         else:
-            print(f"--{dd}   {'—':>8}   {'▱' * 8} | {DIM}")
+            print(f"--{dd}   {'—':>8} | {DIM}")
     print("-----")
     total_label = "合计" if ZH else "Total"
     print(f"--{total_label}   {fc(week_total_cost):>8}          {week_total_msgs:>4} msgs | {DIM}")
@@ -735,8 +733,7 @@ def main():
     for model, data in sorted(all_models.items(), key=lambda x: -x[1]["cost"]):
         short = MODEL_SHORT.get(model, model)
         pct = data["msgs"] / total_model_msgs * 100
-        b = bar(data["msgs"], total_model_msgs, 6)
-        print(f"--{short:<12} {pct:>3.0f}%   {fc(data['cost']):>8}   {b} | {ROW2}")
+        print(f"--{short:<12} {pct:>3.0f}%   {fc(data['cost']):>8}   {data['msgs']:>6,} msgs | {ROW2}")
 
     # ── Hourly Activity ──
     hourly = local["hourly"]
@@ -763,11 +760,9 @@ def main():
     if projects:
         print(f"{'项目排行' if ZH else 'Top Projects'} | {SH}")
         top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
-        max_proj_cost = top[0][1]["cost"] if top else 1
         for name, data in top:
             short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
-            b = bar(data["cost"], max_proj_cost, 6)
-            print(f"--{short_name}  {fc(data['cost']):>8}  {b} | {ROW2}")
+            print(f"--{short_name}  {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
 
     # ═══════════════════════════════════════════════════════════════
     # FOOTER
