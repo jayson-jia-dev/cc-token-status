@@ -455,18 +455,19 @@ if DARK:
     BAR  = "color=#4EC9B0 size=11 font=Menlo"
     WARN = "color=#E8A838 size=12"
 else:
-    # Light mode: translucent frosted panel — must be dark + larger
+    # Light mode: NO color attr → SwiftBar uses system native black text
+    # Only accent items get explicit color (green title, blue links)
     H1   = "color=#0B6B50 size=14"
     H2   = "color=#0B6B50 size=13"
-    ROW  = "color=#000000 size=13 font=Menlo"
-    ROW2 = "color=#000000 size=12 font=Menlo"
-    DIM  = "color=#111111 size=12 font=Menlo"     # was 11pt, bumped to 12
-    DIM2 = "color=#111111 size=11 font=Menlo"     # was 10pt, bumped to 11
-    META = "color=#222222 size=11"                 # was 10pt, bumped to 11
+    ROW  = "size=13 font=Menlo"
+    ROW2 = "size=12 font=Menlo"
+    DIM  = "size=12 font=Menlo"
+    DIM2 = "size=11 font=Menlo"
+    META = "size=11"
     SEC  = "color=#14507A size=13"
     SEC2 = "color=#14507A size=12"
-    MODL = "color=#111111 size=12 font=Menlo"
-    BAR  = "color=#0B6B50 size=12 font=Menlo"     # was 11pt, bumped to 12
+    MODL = "size=12 font=Menlo"
+    BAR  = "color=#0B6B50 size=12 font=Menlo"
     WARN = "color=#A05A10 size=12"
 
 def main():
@@ -575,7 +576,7 @@ def main():
         if DARK:
             LINE_COLORS = ["#4EC9B0", "#7AAFCF", "#E0D8C8", "#E8A838"]
         else:
-            LINE_COLORS = ["#0B6B50", "#1B5E8A", "#3A3A3A", "#B86E1A"]
+            LINE_COLORS = ["#0B6B50", "#14507A", None, "#A05A10"]  # None = system default
         _color_idx = [0]
 
         def _danger_color(pct):
@@ -595,7 +596,8 @@ def main():
             # Fixed-width: pct 4 chars, reset 8 chars → always aligned
             col = _danger_color(p) or LINE_COLORS[_color_idx[0] % len(LINE_COLORS)]
             _color_idx[0] += 1
-            print(f"{padded}{_gauge(p)}  {pct_s:>4}  {rst_s:<8} | color={col} size=13 font=Menlo")
+            col_attr = f"color={col} " if col else ""
+            print(f"{padded}{_gauge(p)}  {pct_s:>4}  {rst_s:<8} | {col_attr}size=13 font=Menlo")
             # Submenu: reset time
             rt_local = _reset_time_local(obj.get("resets_at", ""))
             if rt_local:
