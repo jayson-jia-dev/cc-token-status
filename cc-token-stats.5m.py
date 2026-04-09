@@ -460,8 +460,8 @@ if DARK:
     WARN = "color=#E8A838 size=12"                 # amber — warnings
 else:
     # ── Light mode: dark saturated tones (avoid pure gray → SwiftBar makes it transparent) ──
-    H1   = "color=#1A5C4C size=14"                # rich dark teal — title
-    H2   = "color=#1A5C4C size=13"
+    H1   = "color=#0E1018 size=14"                # near-black with subtle blue tint — title
+    H2   = "color=#0E1018 size=13"
     ROW  = "color=#1C2030 size=13 font=Menlo"     # dark navy — primary data (reads as near-black)
     ROW2 = "color=#1C2030 size=12 font=Menlo"
     DIM  = "color=#2C3040 size=12 font=Menlo"     # navy — secondary info
