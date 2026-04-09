@@ -592,7 +592,7 @@ def main():
         LW = 8
 
         def _reset_short(reset_str):
-            """Short ASCII-only reset label for uniform width."""
+            """Short reset label — ASCII only for uniform monospace width."""
             if not reset_str: return ""
             try:
                 rt = datetime.fromisoformat(reset_str.replace("Z", "+00:00"))
@@ -602,7 +602,9 @@ def main():
                 hrs = int(secs // 3600); mins = int((secs % 3600) // 60)
                 if hrs >= 48: return f"{hrs // 24}d"
                 if hrs >= 24: return f"1d{hrs-24}h"
-                if hrs > 0: return f"{hrs}h{mins}m"
+                # Use fixed-length format: "Xh" or "XhYm" or "Xm"
+                if hrs > 0 and mins > 0: return f"{hrs}h{mins}m"
+                if hrs > 0: return f"{hrs}h"
                 return f"{mins}m"
             except: return ""
 

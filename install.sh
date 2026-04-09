@@ -67,11 +67,8 @@ if [ -z "$PLUGIN_DIR" ]; then
 fi
 
 # ─── 4. Clean up old/conflicting plugins ───
-for old in "ccpeek.5m.py" "ccpeek.5m.py.disabled" "cc-pulse.5m.py"; do
-    if [ -f "$PLUGIN_DIR/$old" ]; then
-        rm -f "$PLUGIN_DIR/$old"
-        echo "✓ Removed old plugin: $old"
-    fi
+for old in "$PLUGIN_DIR"/ccpeek* "$PLUGIN_DIR"/cc-pulse*; do
+    [ -f "$old" ] && rm -f "$old" && echo "✓ Removed: $(basename "$old")"
 done
 
 # ─── 5. Download plugin ───
