@@ -169,13 +169,17 @@ def auto_update():
                             str(Path.home()), "Library", "Application Support",
                             "SwiftBar", "plugins", "cc-token-stats.5m.py")
 
-                    urllib.request.urlretrieve(f"{REPO_URL}/cc-token-stats.5m.py", plugin_path)
-                    os.chmod(plugin_path, 0o755)
+                    # Atomic update: download to temp file, then rename
+                    tmp_path = plugin_path + ".tmp"
+                    urllib.request.urlretrieve(f"{REPO_URL}/cc-token-stats.5m.py", tmp_path)
+                    os.chmod(tmp_path, 0o755)
+                    os.rename(tmp_path, plugin_path)  # atomic on same filesystem
                 break
 
         # Record check time
         UPDATE_CHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
         UPDATE_CHECK_FILE.write_text(str(datetime.now().timestamp()))
+        UPDATE_CHECK_FILE.chmod(0o600)
     except: pass
 
 # ─── Usage API (official rate limits) ────────────────────────────
@@ -243,6 +247,7 @@ def get_usage():
         try:
             USAGE_CACHE.parent.mkdir(parents=True, exist_ok=True)
             USAGE_CACHE.write_text(json.dumps(data))
+            USAGE_CACHE.chmod(0o600)  # protect cached OAuth data
         except Exception:
             pass
         return data
@@ -532,23 +537,17 @@ def main():
     print("---")
 
     # ═══════════════════════════════════════════════════════════════
-    # OVERVIEW — 一级菜单，一眼看到全貌
+    # LAYOUT: Limits → Today → Overview → ROI → Details → Machines
     # ═══════════════════════════════════════════════════════════════
     title = "Claude Code 用量看板" if ZH else "Claude Code Usage Dashboard"
     print(f"{title} | {H1}")
-    print("---")
 
-    # ── Key numbers: pure ASCII labels, values pushed to right edge ──
-    cost_s = fc(tc); sess_s = f"{ts:,}"; tok_s = tk(ta)
-    W = 30  # total line display width
+    W = 30  # total line display width for aligned rows
     def rj(label, val):
         pad = W - len(label) - dw(val)
         return f"{label}{' ' * max(pad, 1)}{val}"
-    print(f"{rj('Cost:', cost_s)} | {ROW}")
-    print(f"{rj('Sessions:', sess_s)} | {ROW}")
-    print(f"{rj('Tokens:', tok_s)} | {ROW}")
 
-    # ── Official usage limits (top-level, most important) ──
+    # ═══ 1. LIMITS (most urgent) ═══
     usage = get_usage()
     if usage:
         def _reset_label(reset_str):
@@ -648,52 +647,20 @@ def main():
                     else:
                         print(f"--Resets: {rt_local} | {DIM}")
 
-    # ── Subscription ROI ──
-    sub = CFG.get("subscription", 0)
-    if sub > 0:
-        lbl = CFG.get("subscription_label", "")
-        prefix = f"{lbl} " if lbl else ""
-        savings = tc - sub
-        multiplier = tc / sub if sub > 0 else 0
-        print("---")
-        if ZH:
-            GOLD = "color=#D4A04A size=13" if DARK else "color=#8B6914 size=13"
-            print(f"💰 {prefix}${sub:.0f}/月 · 省 {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
-        else:
-            GOLD = "color=#D4A04A size=13" if DARK else "color=#8B6914 size=13"
-            print(f"💰 {prefix}${sub:.0f}/mo · saved {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
-        # Submenu: details
-        if ZH:
-            print(f"--等价 API 费用：{fc(tc)} | {ROW2}")
-        else:
-            print(f"--API equivalent: {fc(tc)} | {ROW2}")
-        if week_total_cost > 0:
-            daily_avg = week_total_cost / 7
-            monthly_proj = daily_avg * 30
-            if ZH:
-                print(f"--日均：{fc(daily_avg)} · 月估：{fc(monthly_proj)} | {DIM}")
-            else:
-                print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
-
-    print("---")
-
-    # ── Token breakdown ──
-    if ZH:
-        print(f"输入：{tk(ti):>10}   输出：{tk(to):>10} | {DIM}")
-        print(f"缓存写：{tk(tw):>8}   缓存读：{tk(tr):>8} | {DIM}")
-    else:
-        print(f"Input: {tk(ti):>10}   Output: {tk(to):>10} | {DIM}")
-        print(f"Cache W: {tk(tw):>8}   Cache R: {tk(tr):>8} | {DIM}")
-
-    print("---")
-
-    # ── Today (if active) ──
+    # ═══ 2. TODAY + trend comparison ═══
     if today["msgs"] > 0:
+        print("---")
+        # 7d average (excluding today) for trend comparison
+        past_days = [(d, v) for d, v in daily_sorted if v["msgs"] > 0 and d != datetime.now().strftime("%Y-%m-%d")]
+        avg_cost = sum(v["cost"] for _, v in past_days[:7]) / max(len(past_days[:7]), 1) if past_days else 0
+        delta = ""
+        if avg_cost > 0:
+            pct_chg = (today["cost"] - avg_cost) / avg_cost * 100
+            delta = f"  {'↑' if pct_chg >= 0 else '↓'}{abs(pct_chg):.0f}% vs 7d"
         if ZH:
-            print(f"⚡ 今日：{fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} 条 | {SEC}")
+            print(f"⚡ 今日：{fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} 条{delta} | {SEC}")
         else:
-            print(f"⚡ Today: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} msgs | {SEC}")
-        # Submenu: today details
+            print(f"⚡ Today: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} msgs{delta} | {SEC}")
         if ZH:
             print(f"--输入: {tk(today['inp'])}   输出: {tk(today['out'])} | {DIM}")
             print(f"--缓存写: {tk(today['cw'])}   缓存读: {tk(today['cr'])} | {DIM}")
@@ -707,6 +674,45 @@ def main():
                 short = MODEL_SHORT.get(model, model)
                 pct = data["msgs"] / tm_total * 100
                 print(f"--{short}: {data['msgs']:,} ({pct:.0f}%) {fc(data['cost'])} | {MODL}")
+
+    # ═══ 3. OVERVIEW ═══
+    print("---")
+    print(f"{rj('Cost:', fc(tc))} | {ROW}")
+    print(f"{rj('Sessions:', f'{ts:,}')} | {ROW}")
+    print(f"{rj('Tokens:', tk(ta))} | {ROW}")
+    if ZH:
+        print(f"输入：{tk(ti):>10}   输出：{tk(to):>10} | {DIM}")
+        print(f"缓存写：{tk(tw):>8}   缓存读：{tk(tr):>8} | {DIM}")
+    else:
+        print(f"Input: {tk(ti):>10}   Output: {tk(to):>10} | {DIM}")
+        print(f"Cache W: {tk(tw):>8}   Cache R: {tk(tr):>8} | {DIM}")
+
+    # ═══ 4. SUBSCRIPTION ROI ═══
+    sub = CFG.get("subscription", 0)
+    if sub > 0:
+        lbl = CFG.get("subscription_label", "")
+        prefix = f"{lbl} " if lbl else ""
+        savings = tc - sub
+        multiplier = tc / sub if sub > 0 else 0
+        GOLD = "color=#D4A04A size=13" if DARK else "color=#8B6914 size=13"
+        if ZH:
+            print(f"💰 {prefix}${sub:.0f}/月 · 省 {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
+        else:
+            print(f"💰 {prefix}${sub:.0f}/mo · saved {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
+        if ZH:
+            print(f"--等价 API：{fc(tc)} | {ROW2}")
+        else:
+            print(f"--API equiv: {fc(tc)} | {ROW2}")
+        if week_total_cost > 0:
+            daily_avg = week_total_cost / 7
+            monthly_proj = daily_avg * 30
+            if ZH:
+                print(f"--日均：{fc(daily_avg)} · 月估：{fc(monthly_proj)} | {DIM}")
+            else:
+                print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
+
+    # ═══ 5. MACHINES ═══
+    print("---")
 
     # ── Machines — top level summary, details in submenu ──
     for m in machines:
