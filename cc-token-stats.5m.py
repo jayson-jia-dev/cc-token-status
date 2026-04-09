@@ -628,9 +628,9 @@ def main():
         multiplier = tc / sub if sub > 0 else 0
         print("---")
         if ZH:
-            print(f"💰 {prefix}${sub:.0f}/月 → 已节省 {fc(savings)} ({multiplier:.0f}x) | {SEC}")
+            print(f"💰 {prefix}${sub:.0f}/月 → 已节省 {fc(savings)} ({multiplier:.0f}x) | {H2}")
         else:
-            print(f"💰 {prefix}${sub:.0f}/mo → saved {fc(savings)} ({multiplier:.0f}x) | {SEC}")
+            print(f"💰 {prefix}${sub:.0f}/mo → saved {fc(savings)} ({multiplier:.0f}x) | {H2}")
         # Submenu: details
         if ZH:
             print(f"--等价 API 费用：{fc(tc)} | {ROW2}")
