@@ -337,9 +337,11 @@ def scan():
                                 if not s["d_min"] or msg_date < s["d_min"]: s["d_min"] = msg_date
                                 if not s["d_max"] or msg_date > s["d_max"]: s["d_max"] = msg_date
 
-                            # Hourly
-                            if ts_str and len(ts_str) >= 13:
-                                try: s["hourly"][int(ts_str[11:13])] += 1
+                            # Hourly (convert to local timezone)
+                            if ts_str:
+                                try:
+                                    local_h = datetime.fromisoformat(ts_str.replace("Z","+00:00")).astimezone().hour
+                                    s["hourly"][local_h] += 1
                                 except: pass
 
                             # Rolling windows (5h / 7d)
