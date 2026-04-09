@@ -628,23 +628,21 @@ def main():
             col = _danger_color(p) or LINE_COLORS[_color_idx[0] % len(LINE_COLORS)]
             _color_idx[0] += 1
             rt_local = _reset_time_local(obj.get("resets_at", ""))
-            # All ASCII: label(8) + gauge(10) + pct(5) + reset(6) = fixed total
-            line = f"{label:<{LW}}{_gauge(p)} {p:>3.0f}%  ↻{rst:<5}"
-            gauge_lines.append((line, col, rt_local))
+            gauge_lines.append((label, p, rst, col, rt_local))
 
         if gauge_lines:
-            # Pad only to longest gauge line (NOT to W — that adds too much trailing space)
-            max_len = max(len(t) for t, _, _ in gauge_lines)
             print("---")
-            for text, col, rt_local in gauge_lines:
-                padded = text.ljust(max_len)
+            for label, p, rst, col, rt_local in gauge_lines:
+                padded = f"{label:<{LW}}"
                 col_attr = f"color={col} " if col else ""
-                print(f"{padded} | {col_attr}size=13 font=Menlo")
+                print(f"{padded}{_gauge(p)} {p:>3.0f}% | {col_attr}size=13 font=Menlo")
+                # Reset time in submenu
+                rst_label = f"↻{rst}" if rst else ""
                 if rt_local:
                     if ZH:
-                        print(f"--重置：{rt_local} | {DIM}")
+                        print(f"--{rst_label} · 重置 {rt_local} | {DIM}")
                     else:
-                        print(f"--Resets: {rt_local} | {DIM}")
+                        print(f"--{rst_label} · resets {rt_local} | {DIM}")
 
     # ── Subscription ROI ──
     sub = CFG.get("subscription", 0)
