@@ -546,23 +546,16 @@ def main():
         _sd = usage.get("seven_day")
         if _sd and _sd.get("utilization") is not None: _7d_util = _sd["utilization"]
 
-    # Format: CC: $155 · 5h:40% 7d:69%
+    # Format: ⚡ $157 · 41/70%  (compact: session/weekly)
     limit_s = ""
     if _5h_util > 0 or _7d_util > 0:
-        limit_s = f" · 5h:{_5h_util:.0f}% 7d:{_7d_util:.0f}%"
-
-    # Color red when any limit is critical
+        limit_s = f" · {_5h_util:.0f}/{_7d_util:.0f}%"
     danger = _5h_util >= 80 or _7d_util >= 80
 
-    if today["msgs"] > 0:
-        bar_text = f"CC: {fc(today['cost'])}{limit_s}"
-    else:
-        bar_text = f"CC: {tk(ta)}{limit_s}"
-
-    if danger:
-        print(f"{bar_text} | {icon} color=#E85838")
-    else:
-        print(f"{bar_text} | {icon}")
+    cost_s = fc(today['cost']) if today["msgs"] > 0 else tk(ta)
+    bar_text = f"{cost_s}{limit_s}"
+    color_attr = " color=#E85838" if danger else ""
+    print(f"{bar_text} | {icon}{color_attr}")
     print("---")
 
     # ═══════════════════════════════════════════════════════════════
