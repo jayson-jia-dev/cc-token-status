@@ -455,8 +455,9 @@ if DARK:
     BAR  = "color=#4EC9B0 size=11 font=Menlo"
     WARN = "color=#E8A838 size=12"
 else:
-    # Light mode: NO color attr → SwiftBar uses system native black text
-    # Only accent items get explicit color (green title, blue links)
+    # Light mode: SwiftBar renders all plugin text as semi-transparent gray
+    # on frosted glass — this is a SwiftBar limitation, not fixable via color attr.
+    # We keep font=Menlo for alignment, use size for hierarchy.
     H1   = "color=#0B6B50 size=14"
     H2   = "color=#0B6B50 size=13"
     ROW  = "size=13 font=Menlo"
