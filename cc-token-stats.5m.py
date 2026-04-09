@@ -133,6 +133,10 @@ def scan():
     # 7-day date keys
     day_keys = [(datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
 
+    now_dt = datetime.now()
+    cutoff_5h = now_dt - timedelta(hours=5)
+    cutoff_7d = now_dt - timedelta(days=7)
+
     s = {
         "machine": MACHINE, "sessions": 0,
         "inp": 0, "out": 0, "cw": 0, "cr": 0,
@@ -140,6 +144,9 @@ def scan():
         "models": {},
         # Today
         "today": {"tokens": 0, "cost": 0.0, "msgs": 0, "inp": 0, "out": 0, "cw": 0, "cr": 0, "models": {}},
+        # Rolling windows
+        "window_5h": {"tokens": 0, "cost": 0.0, "msgs": 0, "out": 0},
+        "window_7d": {"tokens": 0, "cost": 0.0, "msgs": 0, "out": 0},
         # Daily (last 7 days)
         "daily": {d: {"tokens": 0, "cost": 0.0, "msgs": 0} for d in day_keys},
         # Hourly (24h)
@@ -206,6 +213,18 @@ def scan():
                             # Hourly
                             if ts_str and len(ts_str) >= 13:
                                 try: s["hourly"][int(ts_str[11:13])] += 1
+                                except: pass
+
+                            # Rolling windows (5h / 7d)
+                            if ts_str:
+                                try:
+                                    msg_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                                    if msg_dt >= cutoff_5h:
+                                        s["window_5h"]["tokens"] += total_t; s["window_5h"]["cost"] += mc
+                                        s["window_5h"]["msgs"] += 1; s["window_5h"]["out"] += o
+                                    if msg_dt >= cutoff_7d:
+                                        s["window_7d"]["tokens"] += total_t; s["window_7d"]["cost"] += mc
+                                        s["window_7d"]["msgs"] += 1; s["window_7d"]["out"] += o
                                 except: pass
 
                             # Project
@@ -430,6 +449,19 @@ def main():
                 short = MODEL_SHORT.get(model, model)
                 pct = data["msgs"] / tm_total * 100
                 print(f"--{short}: {data['msgs']:,} ({pct:.0f}%) {fc(data['cost'])} | {MODL}")
+
+    # ── Rolling windows: 5h / 7d ──
+    w5 = local["window_5h"]; w7 = local["window_7d"]
+    if w5["msgs"] > 0:
+        if ZH:
+            print(f"⏱ 5h 窗口：{fc(w5['cost'])} · {tk(w5['tokens'])} · {w5['msgs']} 条 | {DIM}")
+        else:
+            print(f"⏱ 5h: {fc(w5['cost'])} · {tk(w5['tokens'])} · {w5['msgs']} msgs | {DIM}")
+    if w7["msgs"] > 0:
+        if ZH:
+            print(f"📅 7d 窗口：{fc(w7['cost'])} · {tk(w7['tokens'])} · {w7['msgs']} 条 | {DIM}")
+        else:
+            print(f"📅 7d: {fc(w7['cost'])} · {tk(w7['tokens'])} · {w7['msgs']} msgs | {DIM}")
 
     # ── Machines — top level summary, details in submenu ──
     for m in machines:
