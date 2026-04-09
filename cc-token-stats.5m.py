@@ -29,7 +29,9 @@ DEFAULTS = {
     "subscription": 0, "subscription_label": "",
     "language": "auto", "machine_labels": {},
     "menu_bar_icon": "sfSymbol=sparkles.rectangle.stack",
+    "notifications": True,
 }
+NOTIFY_STATE_FILE = Path.home() / ".config" / "cc-token-stats" / ".notify_state.json"
 
 def load_config():
     cfg = dict(DEFAULTS)
@@ -129,6 +131,58 @@ def bar(val, maxval, width=12):
     if maxval <= 0: return "▱" * width
     filled = round(val / maxval * width)
     return "▰" * filled + "▱" * (width - filled)
+
+# ─── Notifications ───────────────────────────────────────────────
+
+def check_and_notify(usage):
+    """Send macOS notification when limits cross 80% or 95%. Once per threshold per reset cycle."""
+    if not CFG.get("notifications", True) or not usage:
+        return
+    # Load state
+    state = {}
+    try:
+        if NOTIFY_STATE_FILE.is_file():
+            state = json.loads(NOTIFY_STATE_FILE.read_text())
+    except: pass
+
+    thresholds = [80, 95]
+    checks = [
+        ("Session", "five_hour"),
+        ("Weekly", "seven_day"),
+    ]
+    changed = False
+    for name, key in checks:
+        obj = usage.get(key)
+        if not obj or obj.get("utilization") is None: continue
+        util = obj["utilization"]
+        reset = obj.get("resets_at", "")
+        for t in thresholds:
+            state_key = f"{key}_{t}_{reset}"
+            if util >= t and state_key not in state:
+                # Send notification
+                if t >= 95:
+                    title = f"⛔ {name} {util:.0f}%"
+                    msg = "即将限速！" if ZH else "Rate limit imminent!"
+                else:
+                    title = f"⚠️ {name} {util:.0f}%"
+                    msg = "用量偏高，注意控制" if ZH else "Usage getting high"
+                try:
+                    subprocess.run([
+                        "osascript", "-e",
+                        f'display notification "{msg}" with title "{title}" subtitle "cc-token-status"'
+                    ], timeout=5)
+                except: pass
+                state[state_key] = datetime.now().isoformat()
+                changed = True
+
+    # Cleanup old entries and save
+    if changed:
+        # Keep only entries from current reset cycles
+        try:
+            NOTIFY_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            NOTIFY_STATE_FILE.write_text(json.dumps(state))
+            NOTIFY_STATE_FILE.chmod(0o600)
+        except: pass
 
 # ─── Auto-update (once per day, silent) ──────────────────────────
 
@@ -558,6 +612,7 @@ def main():
 
     # ═══ 1. LIMITS (most urgent) ═══
     # usage already fetched above for menu bar line
+    check_and_notify(usage)
     if usage:
         def _reset_label(reset_str):
             if not reset_str: return ""
@@ -835,6 +890,27 @@ def main():
     if sync_str: parts.append(sync_str)
     parts.append(now)
     print(f"{' · '.join(parts)} | {META}")
+
+    # ═══ SETTINGS ═══
+    print("---")
+    notify_on = CFG.get("notifications", True)
+    notify_icon = "✓" if notify_on else "✗"
+    notify_label = f"{notify_icon} {'通知提醒' if ZH else 'Notifications'}"
+    # Toggle: write config with flipped value
+    toggle_val = "false" if notify_on else "true"
+    notify_cmd = f"""python3 -c "import json,pathlib; p=pathlib.Path('{CONFIG_FILE}'); c=json.loads(p.read_text()); c['notifications']={toggle_val}; p.write_text(json.dumps(c,indent=2))" """
+    print(f"{notify_label} | bash='bash' param1='-c' param2={repr(notify_cmd)} terminal=false refresh=true")
+
+    # Launch at login toggle
+    plist_path = Path.home() / "Library" / "LaunchAgents" / "com.ameba.SwiftBar.plist"
+    login_on = plist_path.is_file() or subprocess.run(["osascript", "-e", 'tell application "System Events" to get the name of every login item'], capture_output=True, text=True).stdout.find("SwiftBar") >= 0
+    login_icon = "✓" if login_on else "✗"
+    login_label = f"{login_icon} {'开机自启' if ZH else 'Launch at Login'}"
+    if login_on:
+        login_cmd = "osascript -e 'tell application \"System Events\" to delete login item \"SwiftBar\"'"
+    else:
+        login_cmd = "osascript -e 'tell application \"System Events\" to make login item at end with properties {path:\"/Applications/SwiftBar.app\", hidden:false}'"
+    print(f"{login_label} | bash='bash' param1='-c' param2={repr(login_cmd)} terminal=false refresh=true")
 
     print("---")
     print("Refresh | refresh=true")
