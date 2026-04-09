@@ -529,25 +529,40 @@ def main():
             all_models[model]["cost"] += data["cost"]
     total_model_msgs = max(sum(v["msgs"] for v in all_models.values()), 1)
 
-    # ─── Menu bar line: cost + most urgent limit ───
+    # ─── Menu bar line ───
     usage = get_usage()
-    # Find the most urgent limit (highest utilization)
-    _top_util = 0
+
+    # Detect if Claude Code is running
+    try:
+        _cc_running = subprocess.run(["pgrep", "-f", "claude-code"], capture_output=True, timeout=3).returncode == 0
+    except: _cc_running = False
+    icon = "sfSymbol=bolt.circle.fill" if _cc_running else "sfSymbol=circle.dashed"
+
+    # Get both limits
+    _5h_util = 0; _7d_util = 0
     if usage:
-        for _uk in ["five_hour", "seven_day"]:
-            _uv = usage.get(_uk)
-            if _uv and _uv.get("utilization") is not None:
-                _top_util = max(_top_util, _uv["utilization"])
+        _fh = usage.get("five_hour")
+        if _fh and _fh.get("utilization") is not None: _5h_util = _fh["utilization"]
+        _sd = usage.get("seven_day")
+        if _sd and _sd.get("utilization") is not None: _7d_util = _sd["utilization"]
+
+    # Format: CC: $155 · 5h:40% 7d:69%
+    limit_s = ""
+    if _5h_util > 0 or _7d_util > 0:
+        limit_s = f" · 5h:{_5h_util:.0f}% 7d:{_7d_util:.0f}%"
+
+    # Color red when any limit is critical
+    danger = _5h_util >= 80 or _7d_util >= 80
 
     if today["msgs"] > 0:
-        limit_s = f" · {_top_util:.0f}%" if _top_util > 0 else ""
-        # Color menu bar text red when limit is critical
-        if _top_util >= 80:
-            print(f"CC: {fc(today['cost'])}{limit_s} | {icon} color=#E85838")
-        else:
-            print(f"CC: {fc(today['cost'])}{limit_s} | {icon}")
+        bar_text = f"CC: {fc(today['cost'])}{limit_s}"
     else:
-        print(f"CC: {tk(ta)} | {icon}")
+        bar_text = f"CC: {tk(ta)}{limit_s}"
+
+    if danger:
+        print(f"{bar_text} | {icon} color=#E85838")
+    else:
+        print(f"{bar_text} | {icon}")
     print("---")
 
     # ═══════════════════════════════════════════════════════════════
