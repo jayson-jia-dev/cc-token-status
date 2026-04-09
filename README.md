@@ -21,8 +21,10 @@ See costs, plan limits, trends, and multi-machine stats at a glance — all in S
 | **Hourly Activity** | Sparkline charts showing which hours you're most active: `▅▇██▇▄` |
 | **Project Ranking** | Which projects consume the most tokens |
 | **Multi-Machine Sync** | iCloud Drive auto-sync across Macs — zero config |
+| **Usage Alerts** | macOS notifications at 80% and 95% plan limits |
+| **Settings Menu** | Toggle notifications, launch at login, switch subscription plan |
 | **Auto-Update** | Checks GitHub daily, silently downloads new versions |
-| **Bilingual** | Auto-detects system language (English / Chinese) |
+| **11 Languages** | EN, 中文, ES, FR, PT, DE, RU, 日本語, 한국어, हिन्दी, العربية — auto-detected |
 | **Dark & Light Mode** | Adapts color scheme to your macOS appearance |
 
 ## Quick Install
