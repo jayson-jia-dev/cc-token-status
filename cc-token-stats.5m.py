@@ -47,15 +47,54 @@ def load_config():
     if cfg["language"] == "auto":
         try:
             out = subprocess.check_output(["defaults","read",".GlobalPreferences","AppleLanguages"], stderr=subprocess.DEVNULL, text=True)
-            # Parse first language from plist array: ( "en-CN", "zh-Hans-CN" )
             langs = [l.strip().strip('"').strip('",') for l in out.split("\n") if l.strip() and l.strip() not in ("(", ")")]
-            cfg["language"] = "zh" if langs and langs[0].startswith("zh") else "en"
+            if langs:
+                fl = langs[0].lower().split("-")[0]  # "en-CN" → "en", "zh-Hans-CN" → "zh"
+                supported = {"en","zh","es","fr","pt","de","ru","ja","ko","hi","ar"}
+                cfg["language"] = fl if fl in supported else "en"
+            else:
+                cfg["language"] = "en"
         except: cfg["language"] = "en"
     return cfg
 
 CFG = load_config()
-ZH = CFG["language"] == "zh"
+LANG = CFG["language"]
+ZH = LANG == "zh"  # kept for backward compat
 MACHINE = socket.gethostname().split(".")[0]
+
+# ─── i18n: 10 languages covering 95%+ world population ─────────
+STRINGS = {
+    "title":       {"en":"Claude Code Usage Dashboard","zh":"Claude Code 用量看板","es":"Panel de uso de Claude Code","fr":"Tableau de bord Claude Code","pt":"Painel de uso Claude Code","de":"Claude Code Nutzungs-Dashboard","ru":"Панель Claude Code","ja":"Claude Code 使用状況","ko":"Claude Code 사용 현황","hi":"Claude Code उपयोग डैशबोर्ड","ar":"لوحة استخدام Claude Code"},
+    "today":       {"en":"Today","zh":"今日","es":"Hoy","fr":"Aujourd'hui","pt":"Hoje","de":"Heute","ru":"Сегодня","ja":"今日","ko":"오늘","hi":"आज","ar":"اليوم"},
+    "live":        {"en":"live","zh":"实时","es":"en vivo","fr":"en direct","pt":"ao vivo","de":"live","ru":"живой","ja":"ライブ","ko":"실시간","hi":"लाइव","ar":"مباشر"},
+    "synced":      {"en":"synced","zh":"同步","es":"sincronizado","fr":"synchronisé","pt":"sincronizado","de":"synchronisiert","ru":"синхр.","ja":"同期","ko":"동기화","hi":"सिंक","ar":"متزامن"},
+    "daily":       {"en":"Daily Details","zh":"每日明细","es":"Detalles diarios","fr":"Détails quotidiens","pt":"Detalhes diários","de":"Tagesdetails","ru":"По дням","ja":"日別詳細","ko":"일별 상세","hi":"दैनिक विवरण","ar":"التفاصيل اليومية"},
+    "older":       {"en":"Older","zh":"更早","es":"Anteriores","fr":"Plus ancien","pt":"Anteriores","de":"Älter","ru":"Ранее","ja":"過去","ko":"이전","hi":"पुराने","ar":"أقدم"},
+    "total":       {"en":"Total","zh":"合计","es":"Total","fr":"Total","pt":"Total","de":"Gesamt","ru":"Итого","ja":"合計","ko":"합계","hi":"कुल","ar":"المجموع"},
+    "models":      {"en":"Models","zh":"模型分布","es":"Modelos","fr":"Modèles","pt":"Modelos","de":"Modelle","ru":"Модели","ja":"モデル","ko":"모델","hi":"मॉडल","ar":"النماذج"},
+    "hours":       {"en":"Active Hours","zh":"活跃时段","es":"Horas activas","fr":"Heures actives","pt":"Horas ativas","de":"Aktive Stunden","ru":"Активность","ja":"活動時間","ko":"활동 시간","hi":"सक्रिय समय","ar":"ساعات النشاط"},
+    "projects":    {"en":"Top Projects","zh":"项目排行","es":"Proyectos","fr":"Projets","pt":"Projetos","de":"Projekte","ru":"Проекты","ja":"プロジェクト","ko":"프로젝트","hi":"परियोजनाएं","ar":"المشاريع"},
+    "saved":       {"en":"saved","zh":"省","es":"ahorrado","fr":"économisé","pt":"economizado","de":"gespart","ru":"экономия","ja":"節約","ko":"절약","hi":"बचत","ar":"وفر"},
+    "msgs":        {"en":"msgs","zh":"条","es":"msgs","fr":"msgs","pt":"msgs","de":"Nachr.","ru":"сообщ.","ja":"件","ko":"건","hi":"संदेश","ar":"رسالة"},
+    "refresh":     {"en":"Refresh","zh":"Refresh","es":"Actualizar","fr":"Actualiser","pt":"Atualizar","de":"Aktualisieren","ru":"Обновить","ja":"更新","ko":"새로고침","hi":"रिफ्रेश","ar":"تحديث"},
+    "quit":        {"en":"Quit SwiftBar","zh":"退出 SwiftBar","es":"Salir de SwiftBar","fr":"Quitter SwiftBar","pt":"Sair do SwiftBar","de":"SwiftBar beenden","ru":"Выйти","ja":"SwiftBar 終了","ko":"SwiftBar 종료","hi":"SwiftBar बंद करें","ar":"إنهاء SwiftBar"},
+    "notify":      {"en":"Notifications","zh":"通知提醒","es":"Notificaciones","fr":"Notifications","pt":"Notificações","de":"Benachrichtigungen","ru":"Уведомления","ja":"通知","ko":"알림","hi":"सूचनाएं","ar":"الإشعارات"},
+    "login":       {"en":"Launch at Login","zh":"开机自启","es":"Iniciar con el sistema","fr":"Lancer au démarrage","pt":"Iniciar com o sistema","de":"Beim Login starten","ru":"Автозапуск","ja":"ログイン時に起動","ko":"로그인 시 실행","hi":"लॉगिन पर लॉन्च","ar":"تشغيل عند الدخول"},
+    "subscription":{"en":"Subscription","zh":"订阅方案","es":"Suscripción","fr":"Abonnement","pt":"Assinatura","de":"Abonnement","ru":"Подписка","ja":"サブスクリプション","ko":"구독","hi":"सदस्यता","ar":"الاشتراك"},
+    "limit_warn":  {"en":"Approaching usage limit","zh":"用量接近上限","es":"Acercándose al límite","fr":"Proche de la limite","pt":"Aproximando do limite","de":"Limit fast erreicht","ru":"Приближение к лимиту","ja":"上限に近づいています","ko":"한도에 가까워지고 있습니다","hi":"सीमा के करीब पहुँच रहे हैं","ar":"اقتراب من الحد"},
+    "limit_crit":  {"en":"Rate limit imminent!","zh":"即将限速！","es":"¡Límite inminente!","fr":"Limite imminente !","pt":"Limite iminente!","de":"Limit erreicht!","ru":"Скоро лимит!","ja":"制限間近！","ko":"제한 임박!","hi":"सीमा निकट!","ar":"!الحد وشيك"},
+    "am":          {"en":"AM","zh":"早上","es":"Mañana","fr":"Matin","pt":"Manhã","de":"Morgen","ru":"Утро","ja":"午前","ko":"오전","hi":"सुबह","ar":"صباحاً"},
+    "pm":          {"en":"PM","zh":"下午","es":"Tarde","fr":"Après-midi","pt":"Tarde","de":"Nachmittag","ru":"День","ja":"午後","ko":"오후","hi":"दोपहर","ar":"ظهراً"},
+    "eve":         {"en":"Eve","zh":"晚上","es":"Noche","fr":"Soir","pt":"Noite","de":"Abend","ru":"Вечер","ja":"夜","ko":"저녁","hi":"शाम","ar":"مساءً"},
+    "late":        {"en":"Late","zh":"凌晨","es":"Madrugada","fr":"Nuit","pt":"Madrugada","de":"Nacht","ru":"Ночь","ja":"深夜","ko":"심야","hi":"रात","ar":"متأخر"},
+    "reset":       {"en":"Resets","zh":"重置","es":"Reinicia","fr":"Réinit.","pt":"Reinicia","de":"Reset","ru":"Сброс","ja":"リセット","ko":"리셋","hi":"रीसेट","ar":"إعادة"},
+    "api_equiv":   {"en":"API equiv","zh":"等价 API","es":"Equiv. API","fr":"Equiv. API","pt":"Equiv. API","de":"API Äquiv.","ru":"API экв.","ja":"API相当","ko":"API 환산","hi":"API समकक्ष","ar":"معادل API"},
+}
+
+def t(key):
+    """Get translated string for current language."""
+    s = STRINGS.get(key, {})
+    return s.get(LANG, s.get("en", key))
 CLAUDE_DIR = os.path.expanduser(CFG["claude_dir"])
 
 def resolve_sync():
@@ -96,9 +135,15 @@ def dw(s):
     return sum(2 if ord(c)>0x2E7F else 1 for c in s)
 
 def tk(n):
-    if ZH:
+    if LANG == "zh":
         if n>=1e8: return f"{n/1e8:.2f} 亿"
         if n>=1e4: return f"{n/1e4:.1f} 万"
+    elif LANG == "ja":
+        if n>=1e8: return f"{n/1e8:.2f} 億"
+        if n>=1e4: return f"{n/1e4:.1f} 万"
+    elif LANG == "ko":
+        if n>=1e8: return f"{n/1e8:.2f} 억"
+        if n>=1e4: return f"{n/1e4:.1f} 만"
     else:
         if n>=1e9: return f"{n/1e9:.2f}B"
         if n>=1e6: return f"{n/1e6:.1f}M"
@@ -162,10 +207,10 @@ def check_and_notify(usage):
                 # Send notification
                 if t >= 95:
                     title = f"⛔ {name} {util:.0f}%"
-                    msg = "即将限速！" if ZH else "Rate limit imminent!"
+                    msg = t("limit_crit")
                 else:
                     title = f"⚠️ {name} {util:.0f}%"
-                    msg = "用量偏高，注意控制" if ZH else "Usage getting high"
+                    msg = t("limit_warn")
                 try:
                     subprocess.run([
                         "osascript", "-e",
@@ -602,7 +647,7 @@ def main():
     # ═══════════════════════════════════════════════════════════════
     # LAYOUT: Limits → Today → Overview → ROI → Details → Machines
     # ═══════════════════════════════════════════════════════════════
-    title = "Claude Code 用量看板" if ZH else "Claude Code Usage Dashboard"
+    title = t("title")
     print(f"{title} | {H1}")
 
     W = 30  # total line display width for aligned rows
@@ -706,24 +751,14 @@ def main():
                 col_attr = f"color={col} " if col else ""
                 print(f"{padded} | {col_attr}size=13 font=Menlo")
                 if rt_local:
-                    if ZH:
-                        print(f"--重置：{rt_local} | {DIM}")
-                    else:
-                        print(f"--Resets: {rt_local} | {DIM}")
+                    print(f"--{t('reset')}: {rt_local} | {DIM}")
 
     # ═══ 2. TODAY + trend comparison ═══
     if today["msgs"] > 0:
         print("---")
-        if ZH:
-            print(f"⚡ 今日：{fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} 条 | {SEC}")
-        else:
-            print(f"⚡ Today: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} msgs | {SEC}")
-        if ZH:
-            print(f"--输入: {tk(today['inp'])}   输出: {tk(today['out'])} | {DIM}")
-            print(f"--缓存写: {tk(today['cw'])}   缓存读: {tk(today['cr'])} | {DIM}")
-        else:
-            print(f"--Input: {tk(today['inp'])}   Output: {tk(today['out'])} | {DIM}")
-            print(f"--Cache W: {tk(today['cw'])}   Cache R: {tk(today['cr'])} | {DIM}")
+        print(f"⚡ {t('today')}: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} {t('msgs')} | {SEC}")
+        print(f"--Input: {tk(today['inp'])}   Output: {tk(today['out'])} | {DIM}")
+        print(f"--Cache W: {tk(today['cw'])}   Cache R: {tk(today['cr'])} | {DIM}")
         if today["models"]:
             print("-----")
             tm_total = max(sum(v["msgs"] for v in today["models"].values()), 1)
@@ -737,12 +772,8 @@ def main():
     print(f"{rj('Cost:', fc(tc))} | {ROW}")
     print(f"{rj('Sessions:', f'{ts:,}')} | {ROW}")
     print(f"{rj('Tokens:', tk(ta))} | {ROW}")
-    if ZH:
-        print(f"输入：{tk(ti):>10}   输出：{tk(to):>10} | {DIM}")
-        print(f"缓存写：{tk(tw):>8}   缓存读：{tk(tr):>8} | {DIM}")
-    else:
-        print(f"Input: {tk(ti):>10}   Output: {tk(to):>10} | {DIM}")
-        print(f"Cache W: {tk(tw):>8}   Cache R: {tk(tr):>8} | {DIM}")
+    print(f"Input: {tk(ti):>10}   Output: {tk(to):>10} | {DIM}")
+    print(f"Cache W: {tk(tw):>8}   Cache R: {tk(tr):>8} | {DIM}")
 
     # ═══ 4. SUBSCRIPTION ROI ═══
     sub = CFG.get("subscription", 0)
@@ -752,21 +783,12 @@ def main():
         savings = tc - sub
         multiplier = tc / sub if sub > 0 else 0
         GOLD = "color=#D4A04A size=13" if DARK else "color=#8B6914 size=13"
-        if ZH:
-            print(f"💰 {prefix}${sub:.0f}/月 · 省 {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
-        else:
-            print(f"💰 {prefix}${sub:.0f}/mo · saved {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
-        if ZH:
-            print(f"--等价 API：{fc(tc)} | {ROW2}")
-        else:
-            print(f"--API equiv: {fc(tc)} | {ROW2}")
+        print(f"💰 {prefix}${sub:.0f}/mo · {t('saved')} {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
+        print(f"--{t('api_equiv')}: {fc(tc)} | {ROW2}")
         if week_total_cost > 0:
             daily_avg = week_total_cost / 7
             monthly_proj = daily_avg * 30
-            if ZH:
-                print(f"--日均：{fc(daily_avg)} · 月估：{fc(monthly_proj)} | {DIM}")
-            else:
-                print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
+            print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
 
     # ═══ 5. MACHINES ═══
     print("---")
@@ -775,19 +797,15 @@ def main():
     for m in machines:
         ma = m["inp"] + m["out"] + m["cw"] + m["cr"]
         if m["local"]:
-            suf = " (实时)" if ZH else " (live)"
+            suf = f" ({t('live')})"
         else:
-            suf = (f" (同步 {m['at'][5:16]})" if ZH else f" (synced {m['at'][5:16]})") if m.get("at") else ""
+            suf = f" ({t('synced')} {m['at'][5:16]})" if m.get("at") else ""
         print(f"{m['label']}{suf}  {fc(m['cost'])} | {SEC}")
 
         # Submenu: machine details
         print(f"--Token: {tk(ma)} · Sessions: {m['sessions']} | {ROW2}")
-        if ZH:
-            print(f"--输入: {tk(m['inp'])}   输出: {tk(m['out'])} | {DIM}")
-            print(f"--缓存写: {tk(m['cw'])}   缓存读: {tk(m['cr'])} | {DIM}")
-        else:
-            print(f"--Input: {tk(m['inp'])}   Output: {tk(m['out'])} | {DIM}")
-            print(f"--Cache W: {tk(m['cw'])}   Cache R: {tk(m['cr'])} | {DIM}")
+        print(f"--Input: {tk(m['inp'])}   Output: {tk(m['out'])} | {DIM}")
+        print(f"--Cache W: {tk(m['cw'])}   Cache R: {tk(m['cr'])} | {DIM}")
         mb = m.get("models", {})
         if mb:
             print("-----")
@@ -813,7 +831,7 @@ def main():
     all_total_msgs = sum(v["msgs"] for v in daily.values())
     active_days = [(d, v) for d, v in reversed(daily_sorted) if v["msgs"] > 0]
     day_count = len(active_days)
-    print(f"{'每日明细' if ZH else 'Daily Details'} | {SH}")
+    print(f"{t('daily')} | {SH}")
     # Show recent 15
     for date, data in active_days[:15]:
         dd = date[5:]
@@ -823,19 +841,16 @@ def main():
         older = active_days[15:]
         older_cost = sum(v["cost"] for _, v in older)
         older_msgs = sum(v["msgs"] for _, v in older)
-        if ZH:
-            print(f"--更早 ({len(older)}天) {fc(older_cost)} · {older_msgs} msgs | {DIM}")
-        else:
-            print(f"--Older ({len(older)}d) {fc(older_cost)} · {older_msgs} msgs | {DIM}")
+        print(f"--{t('older')} ({len(older)}d) {fc(older_cost)} · {older_msgs} msgs | {DIM}")
         for date, data in older:
             dd = date[5:]
             print(f"----{dd}   {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
     print("-----")
-    total_label = "合计" if ZH else "Total"
+    total_label = t("total")
     print(f"--{total_label}   {fc(all_total_cost):>8}   {all_total_msgs:>5} msgs | {DIM}")
 
     # ── Models ──
-    print(f"{'模型分布' if ZH else 'Models'} | {SH}")
+    print(f"{t('models')} | {SH}")
     for model, data in sorted(all_models.items(), key=lambda x: -x[1]["cost"]):
         short = MODEL_SHORT.get(model, model)
         pct = data["msgs"] / total_model_msgs * 100
@@ -844,7 +859,7 @@ def main():
     # ── Hourly Activity ──
     hourly = local["hourly"]
     if hourly:
-        print(f"{'活跃时段' if ZH else 'Active Hours'} | {SH}")
+        print(f"{t('hours')} | {SH}")
         total_hourly = max(sum(hourly.values()), 1)
         max_h = max(hourly.values()) if hourly else 1
         # Spark bars: ▁▂▃▄▅▆▇█ — each char = 1 hour, height = relative activity
@@ -856,23 +871,23 @@ def main():
             return sparks[level]
 
         block_defs = [
-            ("早上" if ZH else "AM",   "06–12", range(6, 12)),
-            ("下午" if ZH else "PM",   "12–18", range(12, 18)),
-            ("晚上" if ZH else "Eve",  "18–24", range(18, 24)),
-            ("凌晨" if ZH else "Late", "00–06", range(0, 6)),
+            (t("am"),   "06–12", range(6, 12)),
+            (t("pm"),   "12–18", range(12, 18)),
+            (t("eve"),  "18–24", range(18, 24)),
+            (t("late"), "00–06", range(0, 6)),
         ]
         for label, time_str, hours in block_defs:
             count = sum(hourly.get(h, 0) for h in hours)
             if count == 0: continue
             pct = count / total_hourly * 100
             sparkline = "".join(spark(h) for h in hours)
-            msgs_u = "条" if ZH else "msgs"
+            msgs_u = t("msgs")
             print(f"--{label} {time_str}  {sparkline}  {count:>5,} {msgs_u} {pct:>2.0f}% | {ROW2}")
 
     # ── Top Projects ──
     projects = dict(local["projects"])
     if projects:
-        print(f"{'项目排行' if ZH else 'Top Projects'} | {SH}")
+        print(f"{t('projects')} | {SH}")
         top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
         for name, data in top:
             short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
@@ -886,7 +901,7 @@ def main():
     dmax = max((m["d_max"] for m in machines if m["d_max"]), default="N/A")
     rng = f"{dmin[5:]}~{dmax[5:]}" if dmin != "N/A" else "N/A"
     sync_str = {"icloud": "iCloud", "custom": "Custom"}.get(SYNC_TYPE, "")
-    parts = [rng, f"{machine_count}{'台' if ZH else 'mac'}"]
+    parts = [rng, f"{machine_count} mac"]
     if sync_str: parts.append(sync_str)
     parts.append(now)
     print(f"{' · '.join(parts)} | {META}")
@@ -900,7 +915,7 @@ def main():
     # Notification toggle
     notify_on = CFG.get("notifications", True)
     notify_icon = "✓ " if notify_on else "  "
-    notify_label = f"{notify_icon} {'通知提醒' if ZH else 'Notifications'}"
+    notify_label = f"{notify_icon} {t('notify')}"
     toggle_val = "False" if notify_on else "True"  # Python bool, not JSON
     # Write a tiny helper script for SwiftBar to execute
     try:
@@ -946,14 +961,14 @@ esac
         login_on = "SwiftBar" in login_items
     except: login_on = False
     login_icon = "✓ " if login_on else "  "
-    login_label = f"{login_icon} {'开机自启' if ZH else 'Launch at Login'}"
+    login_label = f"{login_icon} {t('login')}"
     login_action = "login-remove" if login_on else "login-add"
     print(f"{login_label} | bash={helper} param1={login_action} terminal=false refresh=true")
 
     # Subscription plan selector
     cur_sub = CFG.get("subscription", 0)
     plans = [("Pro", 20), ("Max 5x", 100), ("Max 20x", 200), ("Team", 30), ("API / None", 0)]
-    plan_title = "订阅方案" if ZH else "Subscription"
+    plan_title = t("subscription")
     cur_name = next((name for name, price in plans if price == cur_sub), f"${cur_sub}")
     print(f"{'  '}{plan_title}: {cur_name} | size=13")
     for name, price in plans:
@@ -963,7 +978,7 @@ esac
 
     print("---")
     print("Refresh | refresh=true")
-    quit_label = "退出 SwiftBar" if ZH else "Quit SwiftBar"
+    quit_label = t("quit")
     print(f"{quit_label} | bash='osascript' param1='-e' param2='quit app \"SwiftBar\"' terminal=false")
 
 if __name__ == "__main__":
