@@ -991,6 +991,8 @@ def main():
     try:
         Path(helper).parent.mkdir(parents=True, exist_ok=True)
         Path(helper).write_text(f"""#!/bin/bash
+REFRESH_CMD="open -g 'swiftbar://refreshplugin?name=cc-token-stats'"
+
 case "$1" in
   notify)
     python3 -c "
@@ -1000,18 +1002,17 @@ c = json.loads(p.read_text())
 c['notifications'] = {toggle_val}
 p.write_text(json.dumps(c, indent=2))
 "
-    sleep 0.5
+    sleep 0.5 && $REFRESH_CMD
     ;;
   login-add)
     osascript -e 'tell application "System Events" to make login item at end with properties {{path:"/Applications/SwiftBar.app", hidden:false}}'
-    sleep 1
+    sleep 1 && $REFRESH_CMD
     ;;
   login-remove)
     osascript -e 'tell application "System Events" to delete login item "SwiftBar"'
-    sleep 1
+    sleep 1 && $REFRESH_CMD
     ;;
   sub)
-    # $2=price $3=label
     python3 -c "
 import json, pathlib
 p = pathlib.Path('{CONFIG_FILE}')
@@ -1020,6 +1021,7 @@ c['subscription'] = int('$2')
 c['subscription_label'] = '$3'
 p.write_text(json.dumps(c, indent=2))
 "
+    sleep 0.5 && $REFRESH_CMD
     ;;
 esac
 """)
