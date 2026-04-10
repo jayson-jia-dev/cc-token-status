@@ -1000,12 +1000,15 @@ c = json.loads(p.read_text())
 c['notifications'] = {toggle_val}
 p.write_text(json.dumps(c, indent=2))
 "
+    sleep 0.5
     ;;
   login-add)
     osascript -e 'tell application "System Events" to make login item at end with properties {{path:"/Applications/SwiftBar.app", hidden:false}}'
+    sleep 1
     ;;
   login-remove)
     osascript -e 'tell application "System Events" to delete login item "SwiftBar"'
+    sleep 1
     ;;
   sub)
     # $2=price $3=label
