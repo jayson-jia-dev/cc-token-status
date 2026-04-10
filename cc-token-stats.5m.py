@@ -794,8 +794,11 @@ def main():
     # ── Machines — top level summary, details in submenu ──
     for m in machines:
         ma = m["inp"] + m["out"] + m["cw"] + m["cr"]
-        dot = "●" if m["local"] else "○"
-        print(f"{dot} {m['label']}  {fc(m['cost'])} | {SEC}")
+        if machine_count == 1:
+            icon_m = "💻"
+        else:
+            icon_m = "●" if m["local"] else "○"
+        print(f"{icon_m} {m['label']}  {fc(m['cost'])} | {SEC}")
 
         # Submenu: machine details
         if m["local"]:
