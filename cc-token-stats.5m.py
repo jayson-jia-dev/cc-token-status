@@ -166,10 +166,8 @@ def tier(m):
 def mlabel(h):
     labels = CFG.get("machine_labels",{})
     if h in labels: return labels[h]
-    hl = h.lower()
-    if "mac" in hl and ("mini" in hl or "home" in hl): return "🏠 Home" if not ZH else "🏠 家里"
-    if any(x in hl for x in ["office","work","corp"]): return "🏢 Office" if not ZH else "🏢 办公室"
-    return f"💻 {h}"
+    # Truncate long hostnames
+    return h[:16] + "…" if len(h) > 16 else h
 
 def bar(val, maxval, width=12):
     """Render a mini bar chart — ▰▱ works in both dark and light mode."""
@@ -796,13 +794,14 @@ def main():
     # ── Machines — top level summary, details in submenu ──
     for m in machines:
         ma = m["inp"] + m["out"] + m["cw"] + m["cr"]
-        if m["local"]:
-            suf = f" ({t('live')})"
-        else:
-            suf = f" ({t('synced')} {m['at'][5:16]})" if m.get("at") else ""
-        print(f"{m['label']}{suf}  {fc(m['cost'])} | {SEC}")
+        dot = "●" if m["local"] else "○"
+        print(f"{dot} {m['label']}  {fc(m['cost'])} | {SEC}")
 
         # Submenu: machine details
+        if m["local"]:
+            print(f"--{t('live')} | {DIM}")
+        elif m.get("at"):
+            print(f"--{t('synced')} {m['at']} | {DIM}")
         print(f"--Token: {tk(ma)} · Sessions: {m['sessions']} | {ROW2}")
         print(f"--Input: {tk(m['inp'])}   Output: {tk(m['out'])} | {DIM}")
         print(f"--Cache W: {tk(m['cw'])}   Cache R: {tk(m['cr'])} | {DIM}")
