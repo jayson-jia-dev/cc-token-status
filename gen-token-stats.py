@@ -19,8 +19,8 @@ OUT_FILE = os.path.join(OUT_DIR, "token-stats.json")
 MODEL_PRICING = {
     "opus_new":  {"input": 5,    "output": 25, "cache_write": 10,    "cache_read": 0.50},
     "opus_old":  {"input": 15,   "output": 75, "cache_write": 18.75, "cache_read": 1.50},
-    "sonnet":    {"input": 3,    "output": 15, "cache_write": 3.75,  "cache_read": 0.30},
-    "haiku":     {"input": 1,    "output": 5,  "cache_write": 1.25,  "cache_read": 0.10},
+    "sonnet":    {"input": 3,    "output": 15, "cache_write": 6,     "cache_read": 0.30},
+    "haiku":     {"input": 1,    "output": 5,  "cache_write": 2,     "cache_read": 0.10},
 }
 
 def get_model_tier(model_name):
