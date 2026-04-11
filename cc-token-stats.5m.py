@@ -400,16 +400,19 @@ def check_and_notify(usage):
         ("Session", "five_hour"),
         ("Weekly", "seven_day"),
     ]
+    current_keys = set()
     changed = False
     for name, key in checks:
         obj = usage.get(key)
         if not obj or obj.get("utilization") is None: continue
         util = obj["utilization"]
-        reset = obj.get("resets_at", "")
+        # Truncate reset time to minute — avoid microsecond differences creating duplicate keys
+        reset_raw = obj.get("resets_at", "")
+        reset = reset_raw[:16] if reset_raw else ""  # "2026-04-11T06:00"
         for thresh in thresholds:
             state_key = f"{key}_{thresh}_{reset}"
+            current_keys.add(state_key)
             if util >= thresh and state_key not in state:
-                # Send notification
                 if thresh >= 95:
                     title = f"⛔ {name} {util:.0f}%"
                     msg = t("limit_crit")
@@ -425,9 +428,13 @@ def check_and_notify(usage):
                 state[state_key] = datetime.now().isoformat()
                 changed = True
 
-    # Cleanup old entries and save
+    # Cleanup: remove old entries from past reset cycles
+    old_keys = [k for k in state if k not in current_keys]
+    if old_keys:
+        for k in old_keys: del state[k]
+        changed = True
+
     if changed:
-        # Keep only entries from current reset cycles
         try:
             NOTIFY_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
             NOTIFY_STATE_FILE.write_text(json.dumps(state))
