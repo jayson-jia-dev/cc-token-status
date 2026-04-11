@@ -1135,7 +1135,8 @@ def main():
             _next_icon = LEVELS[_lvl + 1][1]
             _next_name = LEVELS[_lvl + 1][3] if LANG == "zh" else LEVELS[_lvl + 1][2]
             next_label = "下一级" if LANG == "zh" else "Next"
-            print(f"--{next_label}: {_next_icon} Lv.{_lvl+2} {_next_name} (+{gap}pts) | {DIM}")
+            need_label = "还需" if LANG == "zh" else "need"
+            print(f"--{next_label}: {_next_icon} Lv.{_lvl+2} {_next_name} ({need_label} {gap}) | {DIM}")
     except: pass
 
     # ═══════════════════════════════════════════════════════════════
