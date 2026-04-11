@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, socket, subprocess
@@ -89,6 +89,10 @@ STRINGS = {
     "late":        {"en":"Late","zh":"凌晨","es":"Madrugada","fr":"Nuit","ja":"深夜"},
     "reset":       {"en":"Resets","zh":"重置","es":"Reinicia","fr":"Réinit.","ja":"リセット"},
     "api_equiv":   {"en":"API equiv","zh":"等价 API","es":"Equiv. API","fr":"Equiv. API","ja":"API相当"},
+    "input":       {"en":"Input","zh":"输入","es":"Entrada","fr":"Entrée","ja":"入力"},
+    "output":      {"en":"Output","zh":"输出","es":"Salida","fr":"Sortie","ja":"出力"},
+    "cache_w":     {"en":"Cache W","zh":"缓存写","es":"Caché E","fr":"Cache É","ja":"Cache書"},
+    "cache_r":     {"en":"Cache R","zh":"缓存读","es":"Caché L","fr":"Cache L","ja":"Cache読"},
 }
 
 def t(key):
@@ -968,8 +972,8 @@ def main():
     if today["msgs"] > 0:
         print("---")
         print(f"⚡ {t('today')}: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} {t('msgs')} | {SEC}")
-        print(f"--Input: {tk(today['inp'])}   Output: {tk(today['out'])} | {DIM}")
-        print(f"--Cache W: {tk(today['cw'])}   Cache R: {tk(today['cr'])} | {DIM}")
+        print(f"--{t('input')}: {tk(today['inp'])}   {t('output')}: {tk(today['out'])} | {DIM}")
+        print(f"--{t('cache_w')}: {tk(today['cw'])}   {t('cache_r')}: {tk(today['cr'])} | {DIM}")
         if today["models"]:
             print("-----")
             tm_total = max(sum(v["msgs"] for v in today["models"].values()), 1)
@@ -983,8 +987,8 @@ def main():
     print(f"{rj('Cost:', fc(tc))} | {ROW}")
     print(f"{rj('Sessions:', f'{ts:,}')} | {ROW}")
     print(f"{rj('Tokens:', tk(ta))} | {ROW}")
-    print(f"Input: {tk(ti):>10}   Output: {tk(to):>10} | {DIM}")
-    print(f"Cache W: {tk(tw):>8}   Cache R: {tk(tr):>8} | {DIM}")
+    print(f"{t('input')}: {tk(ti):>10}   {t('output')}: {tk(to):>10} | {DIM}")
+    print(f"{t('cache_w')}: {tk(tw):>8}   {t('cache_r')}: {tk(tr):>8} | {DIM}")
 
     # ═══ 4. SUBSCRIPTION ROI ═══
     sub = CFG.get("subscription", 0)
@@ -1019,8 +1023,8 @@ def main():
         elif m.get("at"):
             print(f"--{t('synced')} {m['at']} | {DIM}")
         print(f"--Token: {tk(ma)} · Sessions: {m['sessions']} | {ROW2}")
-        print(f"--Input: {tk(m['inp'])}   Output: {tk(m['out'])} | {DIM}")
-        print(f"--Cache W: {tk(m['cw'])}   Cache R: {tk(m['cr'])} | {DIM}")
+        print(f"--{t('input')}: {tk(m['inp'])}   {t('output')}: {tk(m['out'])} | {DIM}")
+        print(f"--{t('cache_w')}: {tk(m['cw'])}   {t('cache_r')}: {tk(m['cr'])} | {DIM}")
         mb = m.get("models", {})
         if mb:
             print("-----")
