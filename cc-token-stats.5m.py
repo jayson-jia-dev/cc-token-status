@@ -540,7 +540,7 @@ def scan():
     for pd in glob.glob(os.path.join(base, "*")):
         if not os.path.isdir(pd): continue
         proj = os.path.basename(pd)
-        # Extract readable project name (filter empty parts from CJK chars encoded as dashes)
+        # Extract readable project name
         parts = [p for p in proj.replace("-", "/").split("/") if p]
         proj_name = parts[-1] if parts else proj[:20]
 
@@ -762,8 +762,8 @@ def main():
     daily = dict(local["daily"])  # convert from defaultdict
     # Sort by date
     daily_sorted = sorted(daily.items(), key=lambda x: x[0])
-    # Last 7 days for quick stats
-    last_7d = [(d, v) for d, v in daily_sorted if d >= (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")]
+    # Last 7 days for quick stats (today + 6 preceding days)
+    last_7d = [(d, v) for d, v in daily_sorted if d >= (datetime.now() - timedelta(days=6)).strftime("%Y-%m-%d")]
     week_total_cost = sum(v["cost"] for _, v in last_7d)
     week_total_msgs = sum(v["msgs"] for _, v in last_7d)
 
@@ -934,15 +934,27 @@ def main():
     if sub > 0:
         lbl = CFG.get("subscription_label", "")
         prefix = f"{lbl} " if lbl else ""
-        savings = tc - sub
-        multiplier = tc / sub if sub > 0 else 0
+        d_min_all = min((m["d_min"] for m in machines if m["d_min"]), default=None)
+        if d_min_all:
+            first = datetime.strptime(d_min_all, "%Y-%m-%d")
+            months_active = max((datetime.now() - first).days / 30.0, 1)
+        else:
+            months_active = 1
+        total_paid = sub * months_active
+        savings = tc - total_paid
+        multiplier = tc / total_paid
         GOLD = "color=#D4A04A size=13" if DARK else "color=#8B6914 size=13"
         print(f"💰 {prefix}${sub:.0f}/mo · {t('saved')} {fc(savings)} ({multiplier:.0f}x) | {GOLD}")
         print(f"--{t('api_equiv')}: {fc(tc)} | {ROW2}")
-        if week_total_cost > 0:
-            daily_avg = week_total_cost / 7
-            monthly_proj = daily_avg * 30
-            print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
+        if daily_sorted:
+            cutoff_30d = (datetime.now() - timedelta(days=29)).strftime("%Y-%m-%d")
+            last_30d = [(d, v) for d, v in daily_sorted if d >= cutoff_30d]
+            if last_30d:
+                n_days = max((datetime.now() - datetime.strptime(last_30d[0][0], "%Y-%m-%d")).days + 1, 1)
+                cost_30d = sum(v["cost"] for _, v in last_30d)
+                daily_avg = cost_30d / n_days
+                monthly_proj = daily_avg * 30
+                print(f"--Daily: {fc(daily_avg)} · Monthly: {fc(monthly_proj)} | {DIM}")
 
     # ═══ 5. MACHINES ═══
     print("---")
@@ -990,22 +1002,24 @@ def main():
     active_days = [(d, v) for d, v in reversed(daily_sorted) if v["msgs"] > 0]
     day_count = len(active_days)
     print(f"{t('daily')} | {SH}")
+    all_total_tokens = sum(v["tokens"] for v in daily.values())
     # Show recent 15
     for date, data in active_days[:15]:
         dd = date[5:]
-        print(f"--{dd}   {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
+        print(f"--{dd}   {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
     # Older days folded into submenu
     if len(active_days) > 15:
         older = active_days[15:]
         older_cost = sum(v["cost"] for _, v in older)
+        older_tokens = sum(v["tokens"] for _, v in older)
         older_msgs = sum(v["msgs"] for _, v in older)
-        print(f"--{t('older')} ({len(older)}d) {fc(older_cost)} · {older_msgs} msgs | {DIM}")
+        print(f"--{t('older')} ({len(older)}d) {fc(older_cost)} · {tk(older_tokens)} · {older_msgs} msgs | {DIM}")
         for date, data in older:
             dd = date[5:]
-            print(f"----{dd}   {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
+            print(f"----{dd}   {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
     print("-----")
     total_label = t("total")
-    print(f"--{total_label}   {fc(all_total_cost):>8}   {all_total_msgs:>5} msgs | {DIM}")
+    print(f"--{total_label}   {fc(all_total_cost):>8}   {tk(all_total_tokens):>8}   {all_total_msgs:>5} msgs | {DIM}")
 
     # ── Models ──
     print(f"{t('models')} | {SH}")
@@ -1049,7 +1063,7 @@ def main():
         top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
         for name, data in top:
             short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
-            print(f"--{short_name}  {fc(data['cost']):>8}   {data['msgs']:>5} msgs | {ROW2}")
+            print(f"--{short_name}  {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
 
     # ═══ USER LEVEL ═══
     try:
