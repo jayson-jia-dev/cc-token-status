@@ -30,6 +30,7 @@ DEFAULTS = {
     "language": "auto", "machine_labels": {},
     "menu_bar_icon": "sfSymbol=sparkles.rectangle.stack",
     "notifications": True,
+    "auto_update": True,
 }
 NOTIFY_STATE_FILE = Path.home() / ".config" / "cc-token-stats" / ".notify_state.json"
 
@@ -50,7 +51,7 @@ def load_config():
             langs = [l.strip().strip('"').strip('",') for l in out.split("\n") if l.strip() and l.strip() not in ("(", ")")]
             if langs:
                 fl = langs[0].lower().split("-")[0]  # "en-CN" → "en", "zh-Hans-CN" → "zh"
-                supported = {"en","zh","es","fr","pt","de","ru","ja","ko","hi","ar"}
+                supported = {"en","zh","es","fr","ja"}
                 cfg["language"] = fl if fl in supported else "en"
             else:
                 cfg["language"] = "en"
@@ -64,31 +65,30 @@ MACHINE = socket.gethostname().split(".")[0]
 
 # ─── i18n: 10 languages covering 95%+ world population ─────────
 STRINGS = {
-    "title":       {"en":"Claude Code Usage Dashboard","zh":"Claude Code 用量看板","es":"Panel de uso de Claude Code","fr":"Tableau de bord Claude Code","pt":"Painel de uso Claude Code","de":"Claude Code Nutzungs-Dashboard","ru":"Панель Claude Code","ja":"Claude Code 使用状況","ko":"Claude Code 사용 현황","hi":"Claude Code उपयोग डैशबोर्ड","ar":"لوحة استخدام Claude Code"},
-    "today":       {"en":"Today","zh":"今日","es":"Hoy","fr":"Aujourd'hui","pt":"Hoje","de":"Heute","ru":"Сегодня","ja":"今日","ko":"오늘","hi":"आज","ar":"اليوم"},
-    "live":        {"en":"live","zh":"实时","es":"en vivo","fr":"en direct","pt":"ao vivo","de":"live","ru":"живой","ja":"ライブ","ko":"실시간","hi":"लाइव","ar":"مباشر"},
-    "synced":      {"en":"synced","zh":"同步","es":"sincronizado","fr":"synchronisé","pt":"sincronizado","de":"synchronisiert","ru":"синхр.","ja":"同期","ko":"동기화","hi":"सिंक","ar":"متزامن"},
-    "daily":       {"en":"Daily Details","zh":"每日明细","es":"Detalles diarios","fr":"Détails quotidiens","pt":"Detalhes diários","de":"Tagesdetails","ru":"По дням","ja":"日別詳細","ko":"일별 상세","hi":"दैनिक विवरण","ar":"التفاصيل اليومية"},
-    "older":       {"en":"Older","zh":"更早","es":"Anteriores","fr":"Plus ancien","pt":"Anteriores","de":"Älter","ru":"Ранее","ja":"過去","ko":"이전","hi":"पुराने","ar":"أقدم"},
-    "total":       {"en":"Total","zh":"合计","es":"Total","fr":"Total","pt":"Total","de":"Gesamt","ru":"Итого","ja":"合計","ko":"합계","hi":"कुल","ar":"المجموع"},
-    "models":      {"en":"Models","zh":"模型分布","es":"Modelos","fr":"Modèles","pt":"Modelos","de":"Modelle","ru":"Модели","ja":"モデル","ko":"모델","hi":"मॉडल","ar":"النماذج"},
-    "hours":       {"en":"Active Hours","zh":"活跃时段","es":"Horas activas","fr":"Heures actives","pt":"Horas ativas","de":"Aktive Stunden","ru":"Активность","ja":"活動時間","ko":"활동 시간","hi":"सक्रिय समय","ar":"ساعات النشاط"},
-    "projects":    {"en":"Top Projects","zh":"项目排行","es":"Proyectos","fr":"Projets","pt":"Projetos","de":"Projekte","ru":"Проекты","ja":"プロジェクト","ko":"프로젝트","hi":"परियोजनाएं","ar":"المشاريع"},
-    "saved":       {"en":"saved","zh":"省","es":"ahorrado","fr":"économisé","pt":"economizado","de":"gespart","ru":"экономия","ja":"節約","ko":"절약","hi":"बचत","ar":"وفر"},
-    "msgs":        {"en":"msgs","zh":"条","es":"msgs","fr":"msgs","pt":"msgs","de":"Nachr.","ru":"сообщ.","ja":"件","ko":"건","hi":"संदेश","ar":"رسالة"},
-    "refresh":     {"en":"Refresh","zh":"Refresh","es":"Actualizar","fr":"Actualiser","pt":"Atualizar","de":"Aktualisieren","ru":"Обновить","ja":"更新","ko":"새로고침","hi":"रिफ्रेश","ar":"تحديث"},
-    "quit":        {"en":"Quit SwiftBar","zh":"退出 SwiftBar","es":"Salir de SwiftBar","fr":"Quitter SwiftBar","pt":"Sair do SwiftBar","de":"SwiftBar beenden","ru":"Выйти","ja":"SwiftBar 終了","ko":"SwiftBar 종료","hi":"SwiftBar बंद करें","ar":"إنهاء SwiftBar"},
-    "notify":      {"en":"Notifications","zh":"通知提醒","es":"Notificaciones","fr":"Notifications","pt":"Notificações","de":"Benachrichtigungen","ru":"Уведомления","ja":"通知","ko":"알림","hi":"सूचनाएं","ar":"الإشعارات"},
-    "login":       {"en":"Launch at Login","zh":"开机自启","es":"Iniciar con el sistema","fr":"Lancer au démarrage","pt":"Iniciar com o sistema","de":"Beim Login starten","ru":"Автозапуск","ja":"ログイン時に起動","ko":"로그인 시 실행","hi":"लॉगिन पर लॉन्च","ar":"تشغيل عند الدخول"},
-    "subscription":{"en":"Subscription","zh":"订阅方案","es":"Suscripción","fr":"Abonnement","pt":"Assinatura","de":"Abonnement","ru":"Подписка","ja":"サブスクリプション","ko":"구독","hi":"सदस्यता","ar":"الاشتراك"},
-    "limit_warn":  {"en":"Approaching usage limit","zh":"用量接近上限","es":"Acercándose al límite","fr":"Proche de la limite","pt":"Aproximando do limite","de":"Limit fast erreicht","ru":"Приближение к лимиту","ja":"上限に近づいています","ko":"한도에 가까워지고 있습니다","hi":"सीमा के करीब पहुँच रहे हैं","ar":"اقتراب من الحد"},
-    "limit_crit":  {"en":"Rate limit imminent!","zh":"即将限速！","es":"¡Límite inminente!","fr":"Limite imminente !","pt":"Limite iminente!","de":"Limit erreicht!","ru":"Скоро лимит!","ja":"制限間近！","ko":"제한 임박!","hi":"सीमा निकट!","ar":"!الحد وشيك"},
-    "am":          {"en":"AM","zh":"早上","es":"Mañana","fr":"Matin","pt":"Manhã","de":"Morgen","ru":"Утро","ja":"午前","ko":"오전","hi":"सुबह","ar":"صباحاً"},
-    "pm":          {"en":"PM","zh":"下午","es":"Tarde","fr":"Après-midi","pt":"Tarde","de":"Nachmittag","ru":"День","ja":"午後","ko":"오후","hi":"दोपहर","ar":"ظهراً"},
-    "eve":         {"en":"Eve","zh":"晚上","es":"Noche","fr":"Soir","pt":"Noite","de":"Abend","ru":"Вечер","ja":"夜","ko":"저녁","hi":"शाम","ar":"مساءً"},
-    "late":        {"en":"Late","zh":"凌晨","es":"Madrugada","fr":"Nuit","pt":"Madrugada","de":"Nacht","ru":"Ночь","ja":"深夜","ko":"심야","hi":"रात","ar":"متأخر"},
-    "reset":       {"en":"Resets","zh":"重置","es":"Reinicia","fr":"Réinit.","pt":"Reinicia","de":"Reset","ru":"Сброс","ja":"リセット","ko":"리셋","hi":"रीसेट","ar":"إعادة"},
-    "api_equiv":   {"en":"API equiv","zh":"等价 API","es":"Equiv. API","fr":"Equiv. API","pt":"Equiv. API","de":"API Äquiv.","ru":"API экв.","ja":"API相当","ko":"API 환산","hi":"API समकक्ष","ar":"معادل API"},
+    "title":       {"en":"Claude Code Usage Dashboard","zh":"Claude Code 用量看板","es":"Panel de uso de Claude Code","fr":"Tableau de bord Claude Code","ja":"Claude Code 使用状況"},
+    "today":       {"en":"Today","zh":"今日","es":"Hoy","fr":"Aujourd'hui","ja":"今日"},
+    "live":        {"en":"live","zh":"实时","es":"en vivo","fr":"en direct","ja":"ライブ"},
+    "synced":      {"en":"synced","zh":"同步","es":"sincronizado","fr":"synchronisé","ja":"同期"},
+    "daily":       {"en":"Daily Details","zh":"每日明细","es":"Detalles diarios","fr":"Détails quotidiens","ja":"日別詳細"},
+    "older":       {"en":"Older","zh":"更早","es":"Anteriores","fr":"Plus ancien","ja":"過去"},
+    "total":       {"en":"Total","zh":"合计","es":"Total","fr":"Total","ja":"合計"},
+    "models":      {"en":"Models","zh":"模型分布","es":"Modelos","fr":"Modèles","ja":"モデル"},
+    "hours":       {"en":"Active Hours","zh":"活跃时段","es":"Horas activas","fr":"Heures actives","ja":"活動時間"},
+    "projects":    {"en":"Top Projects","zh":"项目排行","es":"Proyectos","fr":"Projets","ja":"プロジェクト"},
+    "saved":       {"en":"saved","zh":"省","es":"ahorrado","fr":"économisé","ja":"節約"},
+    "msgs":        {"en":"msgs","zh":"条","es":"msgs","fr":"msgs","ja":"件"},
+    "quit":        {"en":"Quit SwiftBar","zh":"退出 SwiftBar","es":"Salir","fr":"Quitter","ja":"終了"},
+    "notify":      {"en":"Notifications","zh":"通知提醒","es":"Notificaciones","fr":"Notifications","ja":"通知"},
+    "login":       {"en":"Launch at Login","zh":"开机自启","es":"Inicio automático","fr":"Lancer au démarrage","ja":"ログイン時に起動"},
+    "subscription":{"en":"Subscription","zh":"订阅方案","es":"Suscripción","fr":"Abonnement","ja":"サブスクリプション"},
+    "limit_warn":  {"en":"Approaching usage limit","zh":"用量接近上限","es":"Acercándose al límite","fr":"Proche de la limite","ja":"上限に近づいています"},
+    "limit_crit":  {"en":"Rate limit imminent!","zh":"即将限速！","es":"¡Límite inminente!","fr":"Limite imminente !","ja":"制限間近！"},
+    "am":          {"en":"AM","zh":"早上","es":"Mañana","fr":"Matin","ja":"午前"},
+    "pm":          {"en":"PM","zh":"下午","es":"Tarde","fr":"Après-midi","ja":"午後"},
+    "eve":         {"en":"Eve","zh":"晚上","es":"Noche","fr":"Soir","ja":"夜"},
+    "late":        {"en":"Late","zh":"凌晨","es":"Madrugada","fr":"Nuit","ja":"深夜"},
+    "reset":       {"en":"Resets","zh":"重置","es":"Reinicia","fr":"Réinit.","ja":"リセット"},
+    "api_equiv":   {"en":"API equiv","zh":"等价 API","es":"Equiv. API","fr":"Equiv. API","ja":"API相当"},
 }
 
 def t(key):
@@ -141,9 +141,6 @@ def tk(n):
     elif LANG == "ja":
         if n>=1e8: return f"{n/1e8:.2f} 億"
         if n>=1e4: return f"{n/1e4:.1f} 万"
-    elif LANG == "ko":
-        if n>=1e8: return f"{n/1e8:.2f} 억"
-        if n>=1e4: return f"{n/1e4:.1f} 만"
     else:
         if n>=1e9: return f"{n/1e9:.2f}B"
         if n>=1e6: return f"{n/1e6:.1f}M"
@@ -447,6 +444,8 @@ UPDATE_CHECK_FILE = Path.home() / ".config" / "cc-token-stats" / ".last_update_c
 
 def auto_update():
     """Check for updates once per day. Downloads new version silently."""
+    if not CFG.get("auto_update", True):
+        return
     try:
         # Check at most once per day
         if UPDATE_CHECK_FILE.is_file():
@@ -1205,6 +1204,15 @@ p.write_text(json.dumps(c, indent=2))
     osascript -e 'tell application "System Events" to delete login item "SwiftBar"'
     sleep 1
     ;;
+  autoupdate)
+    python3 -c "
+import json, pathlib
+p = pathlib.Path('{CONFIG_FILE}')
+c = json.loads(p.read_text())
+c['auto_update'] = not c.get('auto_update', True)
+p.write_text(json.dumps(c, indent=2))
+"
+    ;;
   sub)
     python3 -c "
 import json, pathlib
@@ -1231,6 +1239,12 @@ esac
     login_label = f"{login_icon} {t('login')}"
     login_action = "login-remove" if login_on else "login-add"
     print(f"{login_label} | bash={helper} param1={login_action} terminal=false refresh=true")
+
+    # Auto-update toggle
+    update_on = CFG.get("auto_update", True)
+    update_icon = "✓ " if update_on else "  "
+    update_label = f"{update_icon} {'自动更新' if LANG == 'zh' else 'Auto Update'}"
+    print(f"{update_label} | bash={helper} param1=autoupdate terminal=false refresh=true")
 
     # Subscription plan selector
     cur_sub = CFG.get("subscription", 0)
