@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "2.8.0"
+VERSION = "2.9.0"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, socket, subprocess
@@ -971,10 +971,16 @@ def main():
         guide_text = "Start a Claude Code session to see stats" if LANG != "zh" else "启动 Claude Code 会话以查看统计"
         print(f"{guide_text} | {GUIDE}")
 
-    # ═══ 2. TODAY + trend comparison ═══
+    # Section title style
+    ST = "color=#6B6560 size=11" if DARK else "color=#3C4050 size=11"
+
+    # ═══ 2. TODAY ═══
     if today["msgs"] > 0:
         print("---")
-        print(f"⚡ {t('today')}: {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} {t('msgs')} | {SEC}")
+        today_label = t("today")
+        print(f"── {today_label} ── | {ST}")
+        print(f"⚡ {fc(today['cost'])} · {tk(today['tokens'])} · {today['msgs']} {t('msgs')} | {SEC}")
+        # Token details in submenu
         print(f"--{t('input')}: {tk(today['inp'])}   {t('output')}: {tk(today['out'])} | {DIM}")
         print(f"--{t('cache_w')}: {tk(today['cw'])}   {t('cache_r')}: {tk(today['cr'])} | {DIM}")
         if today["models"]:
@@ -987,20 +993,28 @@ def main():
 
     # ═══ 3. OVERVIEW ═══
     print("---")
+    dmin_all = min((m["d_min"] for m in machines if m["d_min"]), default=None)
+    dmax_all = max((m["d_max"] for m in machines if m["d_max"]), default=None)
+    rng_label = f"{dmin_all[5:]}~{dmax_all[5:]}" if dmin_all and dmax_all else ""
+    overview_title = "累计" if LANG == "zh" else "Total"
+    if rng_label:
+        print(f"── {overview_title} ({rng_label}) ── | {ST}")
+    else:
+        print(f"── {overview_title} ── | {ST}")
     print(f"{rj('Cost:', fc(tc))} | {ROW}")
     print(f"{rj('Sessions:', f'{ts:,}')} | {ROW}")
     print(f"{rj('Tokens:', tk(ta))} | {ROW}")
-    print(f"{t('input')}: {tk(ti):>10}   {t('output')}: {tk(to):>10} | {DIM}")
-    print(f"{t('cache_w')}: {tk(tw):>8}   {t('cache_r')}: {tk(tr):>8} | {DIM}")
+    # Token details in submenu
+    print(f"--{t('input')}: {tk(ti):>10}   {t('output')}: {tk(to):>10} | {DIM}")
+    print(f"--{t('cache_w')}: {tk(tw):>8}   {t('cache_r')}: {tk(tr):>8} | {DIM}")
 
-    # ═══ 4. SUBSCRIPTION ROI ═══
+    # ═══ 4. SUBSCRIPTION ROI (stays as one line) ═══
     sub = CFG.get("subscription", 0)
     if sub > 0:
         lbl = CFG.get("subscription_label", "")
         prefix = f"{lbl} " if lbl else ""
-        d_min_all = min((m["d_min"] for m in machines if m["d_min"]), default=None)
-        if d_min_all:
-            first = datetime.strptime(d_min_all, "%Y-%m-%d")
+        if dmin_all:
+            first = datetime.strptime(dmin_all, "%Y-%m-%d")
             months_active = max((datetime.now() - first).days / 30.0, 1)
         else:
             months_active = 1
@@ -1022,8 +1036,10 @@ def main():
 
     # ═══ 5. MACHINES ═══
     print("---")
+    devices_label = "设备" if LANG == "zh" else "Devices"
+    if machine_count > 1:
+        print(f"── {devices_label} ── | {ST}")
 
-    # ── Machines — top level summary, details in submenu ──
     for m in machines:
         ma = m["inp"] + m["out"] + m["cw"] + m["cr"]
         if machine_count == 1:
@@ -1059,6 +1075,8 @@ def main():
 
     # Section header style
     SH = "color=#5CC6A7 size=12" if DARK else "color=#1A5C4C size=12"
+    details_label = "详情" if LANG == "zh" else "Details"
+    print(f"── {details_label} ── | {ST}")
 
     # ── Daily Details (newest first, max 15 visible, older folded) ──
     all_total_cost = sum(v["cost"] for v in daily.values())
@@ -1169,13 +1187,21 @@ def main():
     # FOOTER
     # ═══════════════════════════════════════════════════════════════
     print("---")
-    dmin = min((m["d_min"] for m in machines if m["d_min"]), default="N/A")
-    dmax = max((m["d_max"] for m in machines if m["d_max"]), default="N/A")
-    rng = f"{dmin[5:]}~{dmax[5:]}" if dmin != "N/A" else "N/A"
     sync_str = {"icloud": "iCloud", "custom": "Custom"}.get(SYNC_TYPE, "")
-    parts = [rng, f"{machine_count} mac"]
+    # "Updated X ago" format — more intuitive than raw timestamp
+    try:
+        _scan_cache_age = datetime.now().timestamp() - SCAN_CACHE_FILE.stat().st_mtime if SCAN_CACHE_FILE.is_file() else 0
+        if _scan_cache_age < 60:
+            _ago = "just now" if LANG != "zh" else "刚刚"
+        elif _scan_cache_age < 3600:
+            _mins = int(_scan_cache_age / 60)
+            _ago = f"{_mins}m ago" if LANG != "zh" else f"{_mins}分钟前"
+        else:
+            _ago = now  # fallback to time
+    except Exception:
+        _ago = now
+    parts = [_ago, f"{machine_count} mac"]
     if sync_str: parts.append(sync_str)
-    parts.append(now)
     print(f"{' · '.join(parts)} | {META}")
 
     # ═══ SETTINGS ═══
