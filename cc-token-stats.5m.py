@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.0.1"
+VERSION = "1.0.0.2"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -78,7 +78,9 @@ STRINGS = {
     "projects":    {"en":"Top Projects","zh":"项目排行","es":"Proyectos","fr":"Projets","ja":"プロジェクト"},
     "saved":       {"en":"saved","zh":"省","es":"ahorrado","fr":"économisé","ja":"節約"},
     "msgs":        {"en":"msgs","zh":"条","es":"msgs","fr":"msgs","ja":"件"},
-    "quit":        {"en":"Quit SwiftBar","zh":"退出 SwiftBar","es":"Salir","fr":"Quitter","ja":"終了"},
+    "quit":        {"en":"Quit","zh":"退出","es":"Salir","fr":"Quitter","ja":"終了"},
+    "refresh":     {"en":"Refresh","zh":"刷新","es":"Actualizar","fr":"Rafraîchir","ja":"更新"},
+    "settings":    {"en":"Settings","zh":"设置","es":"Ajustes","fr":"Réglages","ja":"設定"},
     "notify":      {"en":"Notifications","zh":"通知提醒","es":"Notificaciones","fr":"Notifications","ja":"通知"},
     "login":       {"en":"Launch at Login","zh":"开机自启","es":"Inicio automático","fr":"Lancer au démarrage","ja":"ログイン時に起動"},
     "subscription":{"en":"Subscription","zh":"订阅方案","es":"Suscripción","fr":"Abonnement","ja":"サブスクリプション"},
@@ -1128,7 +1130,6 @@ def main():
     print(f"--{total_label}   {fc(all_total_cost):>8}   {tk(all_total_tokens):>8}   {all_total_msgs:>5} msgs | {DIM}")
 
     # ── Models ──
-    print("---")
     print(f"{t('models')} | {SH}")
     for model, data in sorted(all_models.items(), key=lambda x: -x[1]["cost"]):
         short = MODEL_SHORT.get(model, model)
@@ -1138,7 +1139,6 @@ def main():
     # ── Hourly Activity ──
     hourly = local["hourly"]
     if hourly:
-        print("---")
         print(f"{t('hours')} | {SH}")
         total_hourly = max(sum(hourly.values()), 1)
         max_h = max(hourly.values()) if hourly else 1
@@ -1167,7 +1167,6 @@ def main():
     # ── Top Projects ──
     projects = dict(local["projects"])
     if projects:
-        print("---")
         print(f"{t('projects')} | {SH}")
         top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
         for name, data in top:
@@ -1287,7 +1286,7 @@ esac
     except Exception: pass
 
     # ⚙️ Settings — all toggles collapsed into one submenu
-    settings_label = "设置" if LANG == "zh" else "Settings"
+    settings_label = t("settings")
     print(f"{settings_label} | size=13")
 
     # Notification toggle
@@ -1322,9 +1321,8 @@ esac
 
     # Refresh and Quit — same level as settings, below separator
     print("---")
-    refresh_label = "刷新数据" if LANG == "zh" else "Refresh Data"
-    print(f"{refresh_label} | refresh=true")
-    quit_label = "退出" if LANG == "zh" else "Quit"
+    print(f"{t('refresh')} | refresh=true")
+    quit_label = t("quit")
     print(f"{quit_label} | bash='osascript' param1='-e' param2='quit app \"SwiftBar\"' terminal=false")
 
 if __name__ == "__main__":
