@@ -30,7 +30,9 @@ Costs, plan limits, trends, user level — all in one click. No app to install, 
 | **Multi-Machine Sync** | iCloud Drive auto-sync across Macs — zero config |
 | **Usage Alerts** | macOS notifications at 80% and 95% plan limits |
 | **Settings Menu** | Toggle notifications, auto-update, launch at login, switch plan |
-| **Auto-Update** | Checks GitHub daily, silently downloads new versions |
+| **Auto-Update** | SHA256-verified updates from GitHub, checks daily |
+| **Incremental Scan** | Caches JSONL parse results, skips unchanged files for instant refresh |
+| **Error Hints** | Friendly status messages when OAuth token missing or API unreachable |
 | **5 Languages** | EN, 中文, ES, FR, 日本語 — auto-detected from system |
 | **Dark & Light Mode** | Adapts color scheme to macOS appearance |
 
@@ -76,8 +78,9 @@ curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main
 
 ## How It Works
 
-- **Token & cost** — scans Claude Code JSONL session logs, calculates API-equivalent cost with official Anthropic pricing
-- **Plan limits** — reads OAuth token from macOS Keychain, queries `api.anthropic.com/api/oauth/usage`
+- **Token & cost** — scans Claude Code JSONL session logs with incremental caching (only re-parses changed files), calculates API-equivalent cost with official Anthropic pricing
+- **Plan limits** — reads OAuth token from macOS Keychain, queries `api.anthropic.com/api/oauth/usage` with 4-min cache and 30-min stale limit
+- **Auto-update** — downloads new versions from GitHub, verifies SHA256 checksum before replacing plugin file
 - **Multi-machine sync** — writes stats to iCloud Drive, reads other machines' data automatically
 - **Refresh** — SwiftBar executes the plugin every 5 minutes
 
