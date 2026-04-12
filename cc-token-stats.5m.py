@@ -10,10 +10,10 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "2.9.0"
+VERSION = "2.10.0"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
-import json, os, glob, socket, subprocess
+import json, os, glob, shlex, socket, subprocess
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -177,8 +177,19 @@ LEVELS = [
     (86, "👑", "Orchestrator", "大乘期"),
 ]
 
+LEVEL_CACHE_FILE = Path.home() / ".config" / "cc-token-stats" / ".level_cache.json"
+
 def calc_user_level():
-    """Calculate user level from local data. Returns (score, level_idx, details)."""
+    """Calculate user level from local data. Returns (score, level_idx, details).
+    Cached for 24 hours since level changes very slowly."""
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if LEVEL_CACHE_FILE.is_file():
+            _lc = json.loads(LEVEL_CACHE_FILE.read_text())
+            if _lc.get("date") == today_str:
+                return _lc["score"], _lc["level"], _lc["details"]
+    except Exception: pass
+
     import glob as _g
     _home = os.path.expanduser("~")
     _cd = os.path.join(_home, ".claude")
@@ -290,10 +301,9 @@ def calc_user_level():
     s5 += 10 if _sp >= 8 else 7 if _sp >= 5 else 4 if _sp >= 3 else 2 if _sp >= 1 else 0
     # worktree detection (simplified)
     try:
-        _wt = subprocess.run(["find", os.path.join(_home, "Downloads"), "-maxdepth", "4",
-                              "-name", "worktrees", "-path", "*/.git/*"],
-                             capture_output=True, text=True, timeout=3)
-        if _wt.stdout.strip(): s5 += 4
+        _dl = Path(_home) / "Downloads"
+        if any(_dl.glob("*/.git/worktrees")) or any(_dl.glob("*/*/.git/worktrees")):
+            s5 += 4
     except Exception: pass
     s5 += 4 if _td >= 90 else 3 if _td >= 60 else 2 if _td >= 30 else 1 if _td >= 14 else 0
     s5 = min(s5, 20)
@@ -303,6 +313,10 @@ def calc_user_level():
     lvl = 0
     for i, (threshold, *_) in enumerate(LEVELS):
         if total >= threshold: lvl = i
+    try:
+        LEVEL_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        LEVEL_CACHE_FILE.write_text(json.dumps({"date": today_str, "score": total, "level": lvl, "details": details}))
+    except Exception: pass
     return total, lvl, details
 
 def mlabel(h):
@@ -666,7 +680,7 @@ def scan():
                             # Rolling windows (5h / 7d)
                             if ts_str:
                                 try:
-                                    msg_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                                    msg_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
                                     if msg_dt >= cutoff_5h:
                                         s["window_5h"]["tokens"] += total_t; s["window_5h"]["cost"] += mc
                                         s["window_5h"]["msgs"] += 1; s["window_5h"]["out"] += o
@@ -947,7 +961,7 @@ def main():
 
         if gauge_lines:
             # Pad only to longest gauge line (NOT to W — that adds too much trailing space)
-            max_len = max(len(t) for t, _, _ in gauge_lines)
+            max_len = max(len(text) for text, _, _ in gauge_lines)
             print("---")
             for text, col, rt_local in gauge_lines:
                 padded = text.ljust(max_len)
@@ -957,19 +971,18 @@ def main():
                     print(f"--{t('reset')}: {rt_local} | {DIM}")
 
     # ═══ 1b. USAGE STATUS HINTS ═══
+    HINT = "color=#888888 size=11"
     if not usage and usage_err:
-        WARN = "color=#888888 size=11"
         if usage_err == "no_token":
             hint = "⚠ No OAuth token — log in to Claude Code" if LANG != "zh" else "⚠ 未找到 OAuth token — 请登录 Claude Code"
         else:
             hint = "⚠ Cannot reach Anthropic API" if LANG != "zh" else "⚠ 无法连接 Anthropic API"
-        print(f"{hint} | {WARN}")
+        print(f"{hint} | {HINT}")
 
     # ═══ 1c. FIRST-USE GUIDE ═══
     if ts == 0:
-        GUIDE = "color=#888888 size=11"
         guide_text = "Start a Claude Code session to see stats" if LANG != "zh" else "启动 Claude Code 会话以查看统计"
-        print(f"{guide_text} | {GUIDE}")
+        print(f"{guide_text} | {HINT}")
 
     # Section title style
     ST = "color=#6B6560 size=11" if DARK else "color=#3C4050 size=11"
@@ -1104,6 +1117,7 @@ def main():
     print(f"--{total_label}   {fc(all_total_cost):>8}   {tk(all_total_tokens):>8}   {all_total_msgs:>5} msgs | {DIM}")
 
     # ── Models ──
+    print("---")
     print(f"{t('models')} | {SH}")
     for model, data in sorted(all_models.items(), key=lambda x: -x[1]["cost"]):
         short = MODEL_SHORT.get(model, model)
@@ -1113,6 +1127,7 @@ def main():
     # ── Hourly Activity ──
     hourly = local["hourly"]
     if hourly:
+        print("---")
         print(f"{t('hours')} | {SH}")
         total_hourly = max(sum(hourly.values()), 1)
         max_h = max(hourly.values()) if hourly else 1
@@ -1141,6 +1156,7 @@ def main():
     # ── Top Projects ──
     projects = dict(local["projects"])
     if projects:
+        print("---")
         print(f"{t('projects')} | {SH}")
         top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
         for name, data in top:
@@ -1229,14 +1245,16 @@ def main():
 
     try:
         Path(helper).parent.mkdir(parents=True, exist_ok=True)
+        _escaped_plugin = shlex.quote(_plugin_path)
+        _escaped_config = str(CONFIG_FILE).replace("'", "'\\''")
         Path(helper).write_text(f"""#!/bin/bash
-PLUGIN="{_plugin_path}"
+PLUGIN={_escaped_plugin}
 
 case "$1" in
   notify)
     python3 - <<'PYEOF'
 import json, pathlib
-p = pathlib.Path("{CONFIG_FILE}")
+p = pathlib.Path('{_escaped_config}')
 c = json.loads(p.read_text())
 c["notifications"] = {toggle_val}
 p.write_text(json.dumps(c, indent=2))
@@ -1253,7 +1271,7 @@ PYEOF
   autoupdate)
     python3 - <<'PYEOF'
 import json, pathlib
-p = pathlib.Path("{CONFIG_FILE}")
+p = pathlib.Path('{_escaped_config}')
 c = json.loads(p.read_text())
 c["auto_update"] = not c.get("auto_update", True)
 p.write_text(json.dumps(c, indent=2))
@@ -1262,7 +1280,7 @@ PYEOF
   sub)
     python3 - "$2" "$3" <<'PYEOF'
 import json, pathlib, sys
-p = pathlib.Path("{CONFIG_FILE}")
+p = pathlib.Path('{_escaped_config}')
 c = json.loads(p.read_text())
 c["subscription"] = int(sys.argv[1])
 c["subscription_label"] = sys.argv[2]
