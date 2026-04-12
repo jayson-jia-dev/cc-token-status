@@ -1172,7 +1172,7 @@ def main():
             short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
             print(f"--{short_name}  {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
 
-    # ═══ USER LEVEL ═══
+    # ═══ USER LEVEL (part of details group) ═══
     try:
         _score, _lvl, _det = calc_user_level()
         _icon = LEVELS[_lvl][1]
@@ -1181,7 +1181,6 @@ def main():
         _name = _zh_name if LANG == "zh" else _en_name
         _next_threshold = LEVELS[_lvl + 1][0] if _lvl < len(LEVELS) - 1 else None
 
-        print("---")
         # Experience bar within current level
         _cur_threshold = LEVELS[_lvl][0]
         _next_t = LEVELS[_lvl + 1][0] if _lvl < len(LEVELS) - 1 else 100
@@ -1209,27 +1208,8 @@ def main():
     except Exception: pass
 
     # ═══════════════════════════════════════════════════════════════
-    # FOOTER
+    # OPERATIONS (separated from data by ---)
     # ═══════════════════════════════════════════════════════════════
-    print("---")
-    sync_str = {"icloud": "iCloud", "custom": "Custom"}.get(SYNC_TYPE, "")
-    # "Updated X ago" format — more intuitive than raw timestamp
-    try:
-        _scan_cache_age = datetime.now().timestamp() - SCAN_CACHE_FILE.stat().st_mtime if SCAN_CACHE_FILE.is_file() else 0
-        if _scan_cache_age < 60:
-            _ago = "just now" if LANG != "zh" else "刚刚"
-        elif _scan_cache_age < 3600:
-            _mins = int(_scan_cache_age / 60)
-            _ago = f"{_mins}m ago" if LANG != "zh" else f"{_mins}分钟前"
-        else:
-            _ago = now  # fallback to time
-    except Exception:
-        _ago = now
-    parts = [_ago, f"{machine_count} mac"]
-    if sync_str: parts.append(sync_str)
-    print(f"{' · '.join(parts)} | {META}")
-
-    # ═══ SETTINGS ═══
     print("---")
 
     # Helper script path
@@ -1334,6 +1314,23 @@ esac
         check = "✓ " if price == cur_sub else "  "
         label_short = name.split(" ")[0] if " " in name else name
         print(f"----{check}{name} (${price}/mo) | bash={helper} param1=sub param2={price} param3={label_short} terminal=false refresh=true")
+
+    # Sync info as meta text
+    sync_str = {"icloud": "iCloud", "custom": "Custom"}.get(SYNC_TYPE, "")
+    try:
+        _scan_cache_age = datetime.now().timestamp() - SCAN_CACHE_FILE.stat().st_mtime if SCAN_CACHE_FILE.is_file() else 0
+        if _scan_cache_age < 60:
+            _ago = "just now" if LANG != "zh" else "刚刚"
+        elif _scan_cache_age < 3600:
+            _mins = int(_scan_cache_age / 60)
+            _ago = f"{_mins}m ago" if LANG != "zh" else f"{_mins}分钟前"
+        else:
+            _ago = now
+    except Exception:
+        _ago = now
+    parts = [_ago, f"{machine_count} mac"]
+    if sync_str: parts.append(sync_str)
+    print(f"{' · '.join(parts)} | {META}")
 
     print("---")
     print("Refresh | refresh=true")
