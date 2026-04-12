@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.0"
+VERSION = "1.0.0.1"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -1320,11 +1320,12 @@ esac
         label_short = name.split(" ")[0] if " " in name else name
         print(f"----{check}{name} (${price}/mo) | bash={helper} param1=sub param2={price} param3={label_short} terminal=false refresh=true")
 
-    # Refresh and Quit inside settings submenu
-    print("-----")
-    print(f"--Refresh | refresh=true")
-    quit_label = t("quit")
-    print(f"--{quit_label} | bash='osascript' param1='-e' param2='quit app \"SwiftBar\"' terminal=false")
+    # Refresh and Quit — same level as settings, below separator
+    print("---")
+    refresh_label = "刷新数据" if LANG == "zh" else "Refresh Data"
+    print(f"{refresh_label} | refresh=true")
+    quit_label = "退出" if LANG == "zh" else "Quit"
+    print(f"{quit_label} | bash='osascript' param1='-e' param2='quit app \"SwiftBar\"' terminal=false")
 
 if __name__ == "__main__":
     try:
