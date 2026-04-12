@@ -1176,6 +1176,8 @@ def main():
 
     # ═══ USER LEVEL ═══
     print("---")
+    level_title = "等级" if LANG == "zh" else "Level"
+    print(f"── {level_title} ── | {ST}")
     try:
         _score, _lvl, _det = calc_user_level()
         _icon = LEVELS[_lvl][1]
