@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "2.7.0"
+VERSION = "2.8.0"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, socket, subprocess
@@ -216,7 +216,7 @@ def calc_user_level():
     s2 = 0
     _cm = os.path.join(_cd, "CLAUDE.md")
     if os.path.isfile(_cm):
-        s2 += 4 if len(open(_cm).readlines()) > 50 else 2
+        with open(_cm) as _f: s2 += 4 if len(_f.readlines()) > 50 else 2
     _pcm = _g.glob(os.path.join(_home, "Downloads/*/CLAUDE.md"))
     s2 += 4 if len(_pcm) >= 3 else 2 if len(_pcm) >= 1 else 0
     _md = os.path.join(_cd, "projects/-Users-" + os.path.basename(_home), "memory")
@@ -237,7 +237,7 @@ def calc_user_level():
     _mf2 = os.path.join(_cd, "mcp.json")
     if os.path.isfile(_mf2):
         try:
-            _md2 = json.load(open(_mf2))
+            with open(_mf2) as _f: _md2 = json.load(_f)
             _svs = _md2.get("mcpServers", {})
             _mc = len(_svs)
             _pm = sum(1 for n in _svs if not any(w in n.lower() for w in _wm))
@@ -263,7 +263,7 @@ def calc_user_level():
     _sf = os.path.join(_cd, "settings.json")
     if os.path.isfile(_sf):
         try:
-            _sd = json.load(open(_sf))
+            with open(_sf) as _f: _sd = json.load(_f)
             for v in _sd.get("hooks", {}).values():
                 if isinstance(v, list): _hc += len(v)
         except Exception: pass
@@ -694,11 +694,12 @@ def save_sync(st):
     try:
         os.makedirs(d, exist_ok=True)
         mb = {m: {**v, "cost": round(v["cost"], 2)} for m, v in st.get("models", {}).items()}
-        json.dump({"machine": MACHINE, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "session_count": st["sessions"], "input_tokens": st["inp"], "output_tokens": st["out"],
-            "cache_write_tokens": st["cw"], "cache_read_tokens": st["cr"],
-            "total_cost": round(st["cost"], 2), "date_range": {"min": st["d_min"], "max": st["d_max"]},
-            "model_breakdown": mb}, open(os.path.join(d, "token-stats.json"), "w"), indent=2)
+        with open(os.path.join(d, "token-stats.json"), "w") as f:
+            json.dump({"machine": MACHINE, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "session_count": st["sessions"], "input_tokens": st["inp"], "output_tokens": st["out"],
+                "cache_write_tokens": st["cw"], "cache_read_tokens": st["cr"],
+                "total_cost": round(st["cost"], 2), "date_range": {"min": st["d_min"], "max": st["d_max"]},
+                "model_breakdown": mb}, f, indent=2)
     except Exception: pass
 
 def recalc_remote_cost(data):
@@ -706,24 +707,20 @@ def recalc_remote_cost(data):
     total = 0.0
     mb = data.get("model_breakdown", {})
     if mb:
-        # Has per-model breakdown — recalc from tokens
+        # Has per-model breakdown — use token ratio (not msg ratio, since
+        # Opus messages have far more tokens per msg than Haiku)
         inp = data.get("input_tokens", 0)
         out = data.get("output_tokens", 0)
         cw = data.get("cache_write_tokens", 0)
         cr = data.get("cache_read_tokens", 0)
-        # Estimate per-model share by message ratio, apply correct pricing
-        total_msgs = max(sum(v.get("msgs", 0) for v in mb.values()), 1)
+        total_tokens = max(sum(v.get("tokens", 0) for v in mb.values()), 1)
         for model, mdata in mb.items():
-            ratio = mdata.get("msgs", 0) / total_msgs
+            ratio = mdata.get("tokens", 0) / total_tokens
             p = PRICING.get(tier(model), PRICING["sonnet"])
-            total += (inp * ratio * p["input"] + out * ratio * p["output"] +
-                      cw * ratio * p["cache_write"] + cr * ratio * p["cache_read"]) / 1e6
-        # Also recalc per-model costs
-        for model, mdata in mb.items():
-            ratio = mdata.get("msgs", 0) / total_msgs
-            p = PRICING.get(tier(model), PRICING["sonnet"])
-            mdata["cost"] = round((inp * ratio * p["input"] + out * ratio * p["output"] +
-                                   cw * ratio * p["cache_write"] + cr * ratio * p["cache_read"]) / 1e6, 2)
+            model_cost = (inp * ratio * p["input"] + out * ratio * p["output"] +
+                          cw * ratio * p["cache_write"] + cr * ratio * p["cache_read"]) / 1e6
+            total += model_cost
+            mdata["cost"] = round(model_cost, 2)
     else:
         # Fallback: assume sonnet pricing
         inp = data.get("input_tokens", 0)
@@ -744,7 +741,8 @@ def load_remotes():
         if m == MACHINE: continue
         sf = os.path.join(md, m, "token-stats.json")
         if os.path.isfile(sf):
-            try: remotes.append(recalc_remote_cost(json.load(open(sf))))
+            try:
+                with open(sf) as f: remotes.append(recalc_remote_cost(json.load(f)))
             except Exception: pass
     return remotes
 
@@ -880,22 +878,6 @@ def main():
     # usage already fetched above for menu bar line
     check_and_notify(usage)
     if usage:
-        def _reset_label(reset_str):
-            if not reset_str: return ""
-            try:
-                # Parse as timezone-aware, convert to local
-                rt = datetime.fromisoformat(reset_str.replace("Z", "+00:00"))
-                now_aware = datetime.now().astimezone()
-                diff = rt - now_aware
-                secs = diff.total_seconds()
-                if secs <= 0: return "now" if not ZH else "即将"
-                hrs = int(secs // 3600); mins = int((secs % 3600) // 60)
-                if hrs >= 48: return f"{hrs // 24}d" if not ZH else f"{hrs // 24}天"
-                if hrs >= 24: return f"1d{hrs-24}h" if not ZH else f"1天{hrs-24}时"
-                if hrs > 0: return f"{hrs}h{mins}m" if not ZH else f"{hrs}时{mins}分"
-                return f"{mins}m" if not ZH else f"{mins}分"
-            except Exception: return ""
-
         def _reset_time_local(reset_str):
             try:
                 rt = datetime.fromisoformat(reset_str.replace("Z", "+00:00"))
@@ -1226,13 +1208,13 @@ PLUGIN="{_plugin_path}"
 
 case "$1" in
   notify)
-    python3 -c "
+    python3 - <<'PYEOF'
 import json, pathlib
-p = pathlib.Path('{CONFIG_FILE}')
+p = pathlib.Path("{CONFIG_FILE}")
 c = json.loads(p.read_text())
-c['notifications'] = {toggle_val}
+c["notifications"] = {toggle_val}
 p.write_text(json.dumps(c, indent=2))
-"
+PYEOF
     ;;
   login-add)
     osascript -e 'tell application "System Events" to make login item at end with properties {{path:"/Applications/SwiftBar.app", hidden:false}}'
@@ -1243,23 +1225,23 @@ p.write_text(json.dumps(c, indent=2))
     sleep 1
     ;;
   autoupdate)
-    python3 -c "
+    python3 - <<'PYEOF'
 import json, pathlib
-p = pathlib.Path('{CONFIG_FILE}')
+p = pathlib.Path("{CONFIG_FILE}")
 c = json.loads(p.read_text())
-c['auto_update'] = not c.get('auto_update', True)
+c["auto_update"] = not c.get("auto_update", True)
 p.write_text(json.dumps(c, indent=2))
-"
+PYEOF
     ;;
   sub)
-    python3 -c "
-import json, pathlib
-p = pathlib.Path('{CONFIG_FILE}')
+    python3 - "$2" "$3" <<'PYEOF'
+import json, pathlib, sys
+p = pathlib.Path("{CONFIG_FILE}")
 c = json.loads(p.read_text())
-c['subscription'] = int('$2')
-c['subscription_label'] = '$3'
+c["subscription"] = int(sys.argv[1])
+c["subscription_label"] = sys.argv[2]
 p.write_text(json.dumps(c, indent=2))
-"
+PYEOF
     ;;
 esac
 """)

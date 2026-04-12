@@ -16,6 +16,7 @@ REPO_DIR = os.environ.get("CLAUDE_SYNC_REPO", os.path.join(CLAUDE_DIR, "claude-c
 OUT_DIR = os.path.join(REPO_DIR, "machines", MACHINE)
 OUT_FILE = os.path.join(OUT_DIR, "token-stats.json")
 
+# IMPORTANT: keep in sync with PRICING / tier() in cc-token-stats.5m.py
 MODEL_PRICING = {
     "opus_new":  {"input": 5,    "output": 25, "cache_write": 10,    "cache_read": 0.50},
     "opus_old":  {"input": 15,   "output": 75, "cache_write": 18.75, "cache_read": 1.50},
@@ -26,7 +27,7 @@ MODEL_PRICING = {
 def get_model_tier(model_name):
     m = model_name.lower()
     if "opus" in m:
-        if "4-5" in model_name or "4-6" in model_name:
+        if "4-5" in model_name or "4-6" in model_name or "4.5" in m or "4.6" in m:
             return "opus_new"
         return "opus_old"
     elif "haiku" in m:
