@@ -1014,17 +1014,19 @@ def main():
                 pct = data["msgs"] / tm_total * 100
                 print(f"--{short}: {data['msgs']:,} ({pct:.0f}%) {fc(data['cost'])} | {MODL}")
 
-    # ═══ 3. OVERVIEW (compressed to one line, details in submenu) ═══
+    # ═══ 3. OVERVIEW ═══
     print("---")
     dmin_all = min((m["d_min"] for m in machines if m["d_min"]), default=None)
     dmax_all = max((m["d_max"] for m in machines if m["d_max"]), default=None)
-    active_span = ""
-    if dmin_all:
-        _span_days = (datetime.now() - datetime.strptime(dmin_all, "%Y-%m-%d")).days + 1
-        active_span = f" · {_span_days}d"
-    print(f"{fc(tc)} · {ts:,} sessions{active_span} | {ROW}")
-    # Details in submenu
-    print(f"--Tokens: {tk(ta)} | {ROW2}")
+    rng_label = f"{dmin_all[5:]}~{dmax_all[5:]}" if dmin_all and dmax_all else ""
+    overview_title = "累计" if LANG == "zh" else "Total"
+    if rng_label:
+        print(f"── {overview_title} ({rng_label}) ── | {ST}")
+    else:
+        print(f"── {overview_title} ── | {ST}")
+    print(f"{rj('Cost:', fc(tc))} | {ROW}")
+    print(f"{rj('Sessions:', f'{ts:,}')} | {ROW}")
+    print(f"{rj('Tokens:', tk(ta))} | {ROW}")
     print(f"--{t('input')}: {tk(ti):>10}   {t('output')}: {tk(to):>10} | {DIM}")
     print(f"--{t('cache_w')}: {tk(tw):>8}   {t('cache_r')}: {tk(tr):>8} | {DIM}")
 
@@ -1300,7 +1302,7 @@ esac
     except Exception: pass
 
     # ⚙️ Settings — all toggles collapsed into one submenu
-    settings_label = "⚙️  设置" if LANG == "zh" else "⚙️  Settings"
+    settings_label = "设置" if LANG == "zh" else "Settings"
     print(f"{settings_label} | size=13")
 
     # Notification toggle
