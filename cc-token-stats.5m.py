@@ -1205,15 +1205,11 @@ def main():
             print(f"--{label:<10} {b} {v:>2}/20 | {ROW2}")
 
         if _next_threshold:
-            # Find weakest dimension for actionable hint
-            _weakest_k = min(dim_names.keys(), key=lambda k: _det.get(k, 0))
-            _weakest_label = dim_names[_weakest_k]
-            _weakest_gap = 20 - _det.get(_weakest_k, 0)
+            _gap = _next_threshold - _score
             _next_icon = LEVELS[_lvl + 1][1]
             _next_name = LEVELS[_lvl + 1][3] if LANG == "zh" else LEVELS[_lvl + 1][2]
             next_label = "下一级" if LANG == "zh" else "Next"
-            need_label = "需" if LANG == "zh" else "need"
-            print(f"--{next_label}: {_next_icon} Lv.{_lvl+2} {_next_name} ({need_label} +{_weakest_gap} {_weakest_label}) | {DIM}")
+            print(f"--{next_label}: {_next_icon} Lv.{_lvl+2} {_next_name} (+{_gap}) | {DIM}")
     except Exception: pass
 
     # ═══════════════════════════════════════════════════════════════
