@@ -9,4 +9,3 @@ dist/
 build/
 .DS_Store
 bun.lock
-.github/workflows/
