@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.1.0"
+VERSION = "1.0.1.1"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -1010,8 +1010,7 @@ def main():
         eu = usage.get("extra_usage")
         if eu and eu.get("used_credits") is not None:
             eu_obj = {"utilization": eu.get("utilization") or 0, "resets_at": eu.get("resets_at", "")}
-            extra_label = t("extra")
-            gauge_items.append((f"{extra_label:<7}", eu_obj))
+            gauge_items.append(("Extra  ", eu_obj))
 
         # Build lines with uniform ASCII formatting
         gauge_lines = []
@@ -1021,19 +1020,31 @@ def main():
             rst = _reset_short(obj.get("resets_at"))
             col = _gauge_color(p)
             rt_local = _reset_time_local(obj.get("resets_at", ""))
-            # All ASCII: label(8) + gauge(10) + pct(5) + reset(6) = fixed total
-            line = f"{label:<{LW}}{_gauge(p)} {p:>3.0f}%  ↻{rst:<5}"
-            gauge_lines.append((line, col, rt_local))
+            # All ASCII: label(8) + gauge(10) + pct(5) + optional reset
+            reset_part = f"  ↻{rst}" if rst else ""
+            line = f"{label:<{LW}}{_gauge(p)} {p:>3.0f}%{reset_part}"
+            is_extra = label.strip() == "Extra"
+            gauge_lines.append((line, col, rt_local, is_extra))
 
         if gauge_lines:
             # Pad only to longest gauge line (NOT to W — that adds too much trailing space)
-            max_len = max(len(text) for text, _, _ in gauge_lines)
+            max_len = max(len(text) for text, _, _, _ in gauge_lines)
             print("---")
-            for text, col, rt_local in gauge_lines:
+            for text, col, rt_local, is_extra in gauge_lines:
                 padded = text.ljust(max_len)
                 col_attr = f"color={col} " if col else ""
                 print(f"{padded} | {col_attr}size=13 font=Menlo")
-                if rt_local:
+                if is_extra and eu:
+                    spent = eu.get("used_credits")
+                    limit = eu.get("monthly_limit")
+                    enabled = eu.get("is_enabled", False)
+                    status = "ON" if enabled else "OFF"
+                    if spent is not None:
+                        print(f"--Spent: ${spent:.2f} | {ROW2}")
+                    if limit is not None:
+                        print(f"--Limit: ${limit:.2f}/mo | {DIM}")
+                    print(f"--Status: {status} | {DIM}")
+                elif rt_local:
                     print(f"--{t('reset')}: {rt_local} | {DIM}")
 
     # ═══ 1b. USAGE STATUS HINTS ═══
