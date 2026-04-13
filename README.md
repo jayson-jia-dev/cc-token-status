@@ -46,10 +46,10 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 
 | Feature | Description |
 |---------|-------------|
-| **Plan Usage Limits** | Live 5h session & 7d weekly quotas with color-coded progress bars (Session/Weekly/Sonnet/Opus) |
+| **Plan Usage Limits** | Live 5h session & 7d weekly quotas with color-coded progress bars (Session/Weekly/Sonnet/Opus/Extra) |
 | **Burn Rate Alert** | Warns when session pace projects to hit rate limit within 30 minutes |
 | **Cost & Token Overview** | API-equivalent cost, session count, total tokens with input/output/cache breakdown |
-| **Today + Trend** | Today's spending with trend vs yesterday (↑12% / ↓58%) |
+| **Today + Trend** | Today's spending with trend vs 30-day active-day average (↑12% when above average) |
 | **Subscription ROI** | How much your Pro/Max/Team plan saves vs API pricing, with daily/monthly projections |
 | **User Level** | 🌑→🌒→🌓→🌔→🌕→👑 rank with progress bar and upgrade hints |
 | **Daily Details** | Full cost history (newest first, older dates collapsible) |
@@ -58,6 +58,7 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 | **Project Ranking** | Which projects consume the most tokens |
 | **Multi-Machine Sync** | iCloud Drive auto-sync across Macs — zero config |
 | **Usage Alerts** | macOS notifications at 80% and 95% for Session/Weekly/Sonnet/Opus limits |
+| **Extra Usage** | Shows extra usage gauge with spent amount, monthly limit, and on/off status when enabled |
 | **Auto-Update** | SHA256-verified updates from GitHub, checks daily |
 | **5 Languages** | EN, 中文, ES, FR, 日本語 — auto-detected from system |
 | **Dark & Light Mode** | Adapts color scheme to macOS appearance |
