@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.1.5"
+VERSION = "1.0.1.6"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -1073,6 +1073,8 @@ def main():
                        and d >= (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
                        and v["cost"] > 0]
         trend = ""
+        trend_avg = 0
+        trend_days = 0
         if recent_days:
             avg_cost = sum(v["cost"] for _, v in recent_days) / len(recent_days)
             avg_msgs = sum(v["msgs"] for _, v in recent_days) / len(recent_days)
@@ -1084,8 +1086,12 @@ def main():
                         trend = f" ↑{pct_change:.0f}%"
                     else:
                         trend = f" ↓{abs(pct_change):.0f}%"
+                    trend_avg = avg_cost
+                    trend_days = len(recent_days)
         print(f"── {today_label} ── | {ST}")
         print(f"⚡ {fc(today['cost'])} · {today['msgs']} {t('msgs')}{trend} | {SEC}")
+        if trend and trend_avg > 0:
+            print(f"--vs {trend_days}d avg {fc(trend_avg)} | {DIM}")
         # Token details in submenu
         print(f"--{t('input')}: {tk(today['inp'])}   {t('output')}: {tk(today['out'])} | {DIM}")
         print(f"--{t('cache_w')}: {tk(today['cw'])}   {t('cache_r')}: {tk(today['cr'])} | {DIM}")
