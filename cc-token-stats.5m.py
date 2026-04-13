@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.0.3"
+VERSION = "1.0.0.4"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -61,10 +61,9 @@ def load_config():
 
 CFG = load_config()
 LANG = CFG["language"]
-ZH = LANG == "zh"  # kept for backward compat
 MACHINE = socket.gethostname().split(".")[0]
 
-# ─── i18n: 10 languages covering 95%+ world population ─────────
+# ─── i18n: 5 languages (EN, ZH, ES, FR, JA) ───────────────────
 STRINGS = {
     "title":       {"en":"Claude Code Usage Dashboard","zh":"Claude Code 用量看板","es":"Panel de uso de Claude Code","fr":"Tableau de bord Claude Code","ja":"Claude Code 使用状況"},
     "today":       {"en":"Today","zh":"今日","es":"Hoy","fr":"Aujourd'hui","ja":"今日"},
@@ -445,14 +444,15 @@ def auto_update():
                     with urllib.request.urlopen(f"{REPO_URL}/checksum.sha256", timeout=5) as resp:
                         expected_hash = resp.read().decode().strip().split()[0]
                     if actual_hash != expected_hash:
-                        os.remove(tmp_path)
-                        break  # checksum mismatch, abort update
+                        try: os.remove(tmp_path)
+                        except Exception: pass
+                        return  # checksum mismatch — don't record, retry next cycle
 
                     os.chmod(tmp_path, 0o755)
                     os.rename(tmp_path, plugin_path)  # atomic on same filesystem
                 break
 
-        # Record check time
+        # Record check time — only reached on success or same-version
         UPDATE_CHECK_FILE.parent.mkdir(parents=True, exist_ok=True)
         UPDATE_CHECK_FILE.write_text(str(datetime.now().timestamp()))
         UPDATE_CHECK_FILE.chmod(0o600)
@@ -1074,11 +1074,18 @@ def main():
             icon_m = "●" if m["local"] else "○"
         print(f"{icon_m} {m['label']}  {fc(m['cost'])} | {SEC}")
 
-        # Submenu: machine details
+        # Submenu: machine details + stale detection
         if m["local"]:
             print(f"--{t('live')} | {DIM}")
         elif m.get("at"):
-            print(f"--{t('synced')} {m['at']} | {DIM}")
+            stale_tag = ""
+            try:
+                _sync_dt = datetime.strptime(m["at"], "%Y-%m-%d %H:%M:%S")
+                _sync_age = (datetime.now() - _sync_dt).days
+                if _sync_age >= 7:
+                    stale_tag = f" ({_sync_age}d)" if LANG != "zh" else f" ({_sync_age}天前)"
+            except Exception: pass
+            print(f"--{t('synced')} {m['at']}{stale_tag} | {DIM}")
         print(f"--Token: {tk(ma)} · Sessions: {m['sessions']} | {ROW2}")
         print(f"--{t('input')}: {tk(m['inp'])}   {t('output')}: {tk(m['out'])} | {DIM}")
         print(f"--{t('cache_w')}: {tk(m['cw'])}   {t('cache_r')}: {tk(m['cr'])} | {DIM}")
