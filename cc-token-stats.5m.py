@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.1.7"
+VERSION = "1.0.1.8"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -966,9 +966,9 @@ def main():
 
         # Each gauge gets a distinct base color; danger overrides at 60%/80%
         if DARK:
-            LINE_COLORS = ["#5CC6A7", "#E07850", "#6BA4C9", "#D4CDC0"]   # teal, coral, blue, warm white
+            LINE_COLORS = ["#5CC6A7", "#B08CD8", "#6BA4C9", "#D4CDC0"]   # teal, lavender, blue, warm white
         else:
-            LINE_COLORS = ["#1A5C4C", "#A04030", "#1B5A85", "#2C3040"]   # rich teal, deep coral, deep blue, navy
+            LINE_COLORS = ["#1A5C4C", "#6B4D8A", "#1B5A85", "#2C3040"]   # rich teal, plum, deep blue, navy
         _color_idx = [0]
 
         def _gauge_color(pct):
