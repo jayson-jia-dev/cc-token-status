@@ -37,6 +37,7 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 |---|---|---|---|
 | **See limits at a glance** | Menu bar, one click | Run a command | Open browser |
 | **Official plan limits** | 5h/7d from Anthropic API | Most don't have | Some have |
+| **Burn rate warning** | Auto-alert when approaching limit | No | No |
 | **Multi-machine sync** | iCloud, zero config | No | No |
 | **Install effort** | One command, no server | npm/pip install | Docker + server |
 | **User level system** | 5-dimension scoring | No | No |
@@ -45,17 +46,18 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 
 | Feature | Description |
 |---------|-------------|
-| **Plan Usage Limits** | Live 5h session & 7d weekly quotas with progress bars from Anthropic API |
-| **Cost & Token Overview** | API-equivalent cost, session count, total tokens |
+| **Plan Usage Limits** | Live 5h session & 7d weekly quotas with color-coded progress bars (Session/Weekly/Sonnet/Opus) |
+| **Burn Rate Alert** | Warns when session pace projects to hit rate limit within 30 minutes |
+| **Cost & Token Overview** | API-equivalent cost, session count, total tokens with input/output/cache breakdown |
 | **Today + Trend** | Today's spending with trend vs yesterday (↑12% / ↓58%) |
-| **Subscription ROI** | How much your Pro/Max/Team plan saves vs API pricing |
-| **User Level** | 🌑→🌒→🌓→🌔→🌕→👑 cultivation rank with upgrade hints |
-| **Daily Details** | Full cost history (newest first, older dates expandable) |
+| **Subscription ROI** | How much your Pro/Max/Team plan saves vs API pricing, with daily/monthly projections |
+| **User Level** | 🌑→🌒→🌓→🌔→🌕→👑 rank with progress bar and upgrade hints |
+| **Daily Details** | Full cost history (newest first, older dates collapsible) |
 | **Model Breakdown** | Per-model usage (Opus / Sonnet / Haiku) with percentages |
 | **Hourly Activity** | Sparkline charts: `▅▇██▇▄` shows which hours you're most active |
 | **Project Ranking** | Which projects consume the most tokens |
 | **Multi-Machine Sync** | iCloud Drive auto-sync across Macs — zero config |
-| **Usage Alerts** | macOS notifications at 80% and 95% plan limits |
+| **Usage Alerts** | macOS notifications at 80% and 95% for Session/Weekly/Sonnet/Opus limits |
 | **Auto-Update** | SHA256-verified updates from GitHub, checks daily |
 | **5 Languages** | EN, 中文, ES, FR, 日本語 — auto-detected from system |
 | **Dark & Light Mode** | Adapts color scheme to macOS appearance |
@@ -81,6 +83,21 @@ Scored across 5 dimensions (100 points total):
 - **Scale** — substantial projects, worktrees, tenure
 
 ## How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SwiftBar (5-min refresh)                                   │
+│   ↓                                                         │
+│  cc-token-stats.5m.py                                       │
+│   ├─ scan()        → parse ~/.claude/projects/**/*.jsonl    │
+│   │                  (incremental: mtime fingerprint cache)  │
+│   ├─ get_usage()   → Anthropic OAuth API (4-min cache)      │
+│   │                  ↳ macOS Keychain → OAuth token          │
+│   ├─ save_sync()   → write to iCloud Drive                  │
+│   ├─ auto_update() → GitHub + SHA256 verify                 │
+│   └─ check_and_notify() → macOS notifications               │
+└─────────────────────────────────────────────────────────────┘
+```
 
 - **Token & cost** — scans Claude Code JSONL session logs with incremental caching (only re-parses changed files), calculates API-equivalent cost with official Anthropic pricing
 - **Plan limits** — reads OAuth token from macOS Keychain, queries `api.anthropic.com/api/oauth/usage` with smart caching (4-min fresh + 30-min stale fallback)
@@ -111,6 +128,7 @@ Edit `~/.config/cc-token-stats/config.json` or use the in-app Settings menu:
 | `auto_update` | Daily update check | `true` |
 | `sync_mode` | `"auto"` / `"off"` | `"auto"` |
 | `machine_labels` | Custom device names, e.g. `{"RL001":"Office"}` | `{}` |
+| `menu_bar_icon` | SwiftBar icon style | `"sfSymbol=sparkles.rectangle.stack"` |
 
 ## Update
 
