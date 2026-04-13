@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.0.9"
+VERSION = "1.0.1.0"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -110,6 +110,7 @@ STRINGS = {
     "dim_auto":    {"en":"Automation","zh":"自动化","es":"Automatización","fr":"Automatisation","ja":"自動化"},
     "dim_scale":   {"en":"Scale","zh":"规模化","es":"Escala","fr":"Échelle","ja":"スケール"},
     "burn_rate":   {"en":"~{0}min to rate limit","zh":"约{0}分钟后限速","es":"~{0}min al límite","fr":"~{0}min avant limite","ja":"約{0}分で制限"},
+    "extra":       {"en":"Extra","zh":"额外用量","es":"Extra","fr":"Extra","ja":"追加"},
 }
 
 def t(key):
@@ -1006,6 +1007,11 @@ def main():
         so = usage.get("seven_day_opus")
         if so and so.get("utilization") is not None:
             gauge_items.append(("Opus   ", so))
+        eu = usage.get("extra_usage")
+        if eu and eu.get("used_credits") is not None:
+            eu_obj = {"utilization": eu.get("utilization") or 0, "resets_at": eu.get("resets_at", "")}
+            extra_label = t("extra")
+            gauge_items.append((f"{extra_label:<7}", eu_obj))
 
         # Build lines with uniform ASCII formatting
         gauge_lines = []
