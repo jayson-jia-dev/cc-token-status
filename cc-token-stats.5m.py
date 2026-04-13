@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.0.8"
+VERSION = "1.0.0.9"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -962,12 +962,20 @@ def main():
             filled = round(p / 100 * 10)
             return "▰" * filled + "▱" * (10 - filled)
 
-        # Unified color by utilization level (semantic, not positional)
+        # Each gauge gets a distinct base color; danger overrides at 60%/80%
+        if DARK:
+            LINE_COLORS = ["#5CC6A7", "#E07850", "#6BA4C9", "#D4CDC0"]   # teal, coral, blue, warm white
+        else:
+            LINE_COLORS = ["#1A5C4C", "#A04030", "#1B5A85", "#2C3040"]   # rich teal, deep coral, deep blue, navy
+        _color_idx = [0]
+
         def _gauge_color(pct):
-            """Color by usage severity — green/amber/red."""
+            """Base color by position, overridden by danger at high utilization."""
             if pct >= 80: return "#E85838" if DARK else "#C03020"   # red
             if pct >= 60: return "#E8A838" if DARK else "#B86E1A"   # amber
-            return "#5CC6A7" if DARK else "#1A5C4C"                 # teal
+            col = LINE_COLORS[_color_idx[0] % len(LINE_COLORS)]
+            _color_idx[0] += 1
+            return col
 
         LW = 8
 
