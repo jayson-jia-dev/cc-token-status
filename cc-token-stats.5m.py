@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.1.8"
+VERSION = "1.0.1.9"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -28,7 +28,6 @@ DEFAULTS = {
     "sync_repo": "", "sync_mode": "auto",
     "subscription": 0, "subscription_label": "",
     "language": "auto", "machine_labels": {},
-    "menu_bar_icon": "sfSymbol=sparkles.rectangle.stack",
     "notifications": True,
     "auto_update": True,
 }
@@ -103,6 +102,7 @@ STRINGS = {
     "next_level":  {"en":"Next","zh":"下一级","es":"Siguiente","fr":"Suivant","ja":"次"},
     "no_token":    {"en":"⚠ No OAuth token — log in to Claude Code","zh":"⚠ 未找到 OAuth token — 请登录 Claude Code","es":"⚠ Sin token OAuth — inicie sesión en Claude Code","fr":"⚠ Pas de token OAuth — connectez-vous à Claude Code","ja":"⚠ OAuthトークンなし — Claude Codeにログイン"},
     "api_error":   {"en":"⚠ Cannot reach Anthropic API","zh":"⚠ 无法连接 Anthropic API","es":"⚠ No se puede conectar a la API","fr":"⚠ API Anthropic inaccessible","ja":"⚠ Anthropic APIに接続できません"},
+    "rate_limit":  {"en":"⚠ API rate limited — using cached data","zh":"⚠ API 请求频率受限 — 使用缓存数据","es":"⚠ API limitada — usando caché","fr":"⚠ API limitée — données en cache","ja":"⚠ APIレート制限 — キャッシュ使用中"},
     "first_use":   {"en":"Start a Claude Code session to see stats","zh":"启动 Claude Code 会话以查看统计","es":"Inicie una sesión de Claude Code","fr":"Démarrez une session Claude Code","ja":"Claude Codeセッションを開始してください"},
     "dim_usage":   {"en":"Usage","zh":"使用深度","es":"Uso","fr":"Utilisation","ja":"使用量"},
     "dim_context": {"en":"Context","zh":"上下文","es":"Contexto","fr":"Contexte","ja":"コンテキスト"},
@@ -426,7 +426,6 @@ def check_and_notify(usage):
 
     # Cleanup: remove entries whose reset time has passed (not just missing from current check)
     now_str = datetime.now().strftime("%Y-%m-%dT%H:%M")
-    old_keys = [k for k in state if k not in current_keys and not k.startswith("burn_")]
     # For non-burn keys: only remove if the reset time in the key is in the past
     for k in list(state.keys()):
         if k in current_keys: continue
@@ -564,7 +563,7 @@ def fetch_usage():
     if not token:
         return None, "no_token"
     try:
-        import urllib.request
+        import urllib.request, urllib.error
         url = "https://api.anthropic.com/api/oauth/usage"
         headers = {
             "Authorization": f"Bearer {token}",
@@ -591,6 +590,11 @@ def fetch_usage():
                 data["_sub_type"] = sub_type
                 data["_tier"] = tier
                 return data, None
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    return None, "rate_limit"
+                if attempt == 0:
+                    continue
             except Exception:
                 if attempt == 0:
                     continue
@@ -622,13 +626,13 @@ def get_usage():
         except Exception:
             pass
         return data, None
-    # Fallback to stale cache — max 30 minutes to avoid showing yesterday's data
+    # Fallback to stale cache — 2 hours; stale data beats an error message
     if USAGE_CACHE.is_file():
         try:
             stale = json.loads(USAGE_CACHE.read_text())
             stale_age = datetime.now().timestamp() - stale.get("_ts", 0)
-            if stale_age < 1800:  # 30 minutes
-                return stale, None  # has data, suppress error hint
+            if stale_age < 7200:  # 2 hours
+                return stale, ("rate_limit" if err == "rate_limit" else None)
         except Exception: pass
     return None, err
 
@@ -929,8 +933,6 @@ def main():
     tw = sum(m["cw"] for m in machines); tr = sum(m["cr"] for m in machines)
     tc = sum(m["cost"] for m in machines); ts = sum(m["sessions"] for m in machines)
     ta = ti + to + tw + tr
-    now = datetime.now().strftime("%H:%M")
-    icon = CFG.get("menu_bar_icon", "sfSymbol=sparkles.rectangle.stack")
     today = local["today"]
     machine_count = len(machines)
 
@@ -939,8 +941,6 @@ def main():
     daily_sorted = sorted(daily.items(), key=lambda x: x[0])
     # Last 7 days for quick stats (today + 6 preceding days)
     last_7d = [(d, v) for d, v in daily_sorted if d >= (datetime.now() - timedelta(days=6)).strftime("%Y-%m-%d")]
-    week_total_cost = sum(v["cost"] for _, v in last_7d)
-    week_total_msgs = sum(v["msgs"] for _, v in last_7d)
 
     # Aggregate models across all machines
     all_models = {}
@@ -1087,7 +1087,10 @@ def main():
 
     # ═══ 1b. USAGE STATUS HINTS ═══
     HINT = "color=#888888 size=11"
-    if not usage and usage_err:
+    if usage_err == "rate_limit":
+        hint = t("rate_limit")
+        print(f"{hint} | {HINT}")
+    elif not usage and usage_err:
         hint = t("no_token") if usage_err == "no_token" else t("api_error")
         print(f"{hint} | {HINT}")
 
@@ -1110,7 +1113,6 @@ def main():
                        and v["cost"] > 0]
         trend = ""
         trend_avg = 0
-        trend_days = 0
         if recent_days:
             avg_cost = sum(v["cost"] for _, v in recent_days) / len(recent_days)
             avg_msgs = sum(v["msgs"] for _, v in recent_days) / len(recent_days)
