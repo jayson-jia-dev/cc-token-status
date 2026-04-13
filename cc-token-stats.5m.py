@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.0.1.6"
+VERSION = "1.0.1.7"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess
@@ -110,6 +110,7 @@ STRINGS = {
     "dim_auto":    {"en":"Automation","zh":"自动化","es":"Automatización","fr":"Automatisation","ja":"自動化"},
     "dim_scale":   {"en":"Scale","zh":"规模化","es":"Escala","fr":"Échelle","ja":"スケール"},
     "burn_rate":   {"en":"~{0}min to rate limit","zh":"约{0}分钟后限速","es":"~{0}min al límite","fr":"~{0}min avant limite","ja":"約{0}分で制限"},
+    "trend_vs":    {"en":"vs 30d avg","zh":"对比 30 天均值","es":"vs prom. 30d","fr":"vs moy. 30j","ja":"30日平均比"},
     "extra":       {"en":"Extra","zh":"额外用量","es":"Extra","fr":"Extra","ja":"追加"},
 }
 
@@ -1081,17 +1082,13 @@ def main():
             # Suppress trend when today's activity < 30% of daily average
             if avg_cost > 0 and (avg_msgs <= 0 or today["msgs"] / avg_msgs >= 0.3):
                 pct_change = (today["cost"] - avg_cost) / avg_cost * 100
-                if abs(pct_change) >= 1:
-                    if pct_change >= 0:
-                        trend = f" ↑{pct_change:.0f}%"
-                    else:
-                        trend = f" ↓{abs(pct_change):.0f}%"
+                if pct_change >= 1:
+                    trend = f" ↑{pct_change:.0f}%"
                     trend_avg = avg_cost
-                    trend_days = len(recent_days)
         print(f"── {today_label} ── | {ST}")
         print(f"⚡ {fc(today['cost'])} · {today['msgs']} {t('msgs')}{trend} | {SEC}")
         if trend and trend_avg > 0:
-            print(f"--vs {trend_days}d avg {fc(trend_avg)} | {DIM}")
+            print(f"--{t('trend_vs')} {fc(trend_avg)} | {DIM}")
         # Token details in submenu
         print(f"--{t('input')}: {tk(today['inp'])}   {t('output')}: {tk(today['out'])} | {DIM}")
         print(f"--{t('cache_w')}: {tk(today['cw'])}   {t('cache_r')}: {tk(today['cr'])} | {DIM}")
