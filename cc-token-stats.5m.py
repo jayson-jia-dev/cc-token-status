@@ -1588,6 +1588,9 @@ def main():
     # DRILL-DOWN — clean, minimal, data-focused
     # ═══════════════════════════════════════════════════════════════
 
+    # Helper script path (defined early — used by Details and Settings)
+    helper = str(Path.home() / ".config" / "cc-token-stats" / ".toggle.sh")
+
     # ── Details → Dashboard report link ──
     details_label = t("details")
     print(f"── {details_label} ── | {ST}")
@@ -1633,9 +1636,6 @@ def main():
     # OPERATIONS (separated from data by ---)
     # ═══════════════════════════════════════════════════════════════
     print("---")
-
-    # Helper script path
-    helper = str(Path.home() / ".config" / "cc-token-stats" / ".toggle.sh")
 
     # Notification toggle
     notify_on = CFG.get("notifications", True)
