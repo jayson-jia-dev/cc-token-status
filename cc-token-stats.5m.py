@@ -1060,7 +1060,7 @@ h3{font-size:12px;color:#8b949e;font-weight:500;margin-bottom:10px;text-transfor
 <script>
 const D=__DATA__;
 const zh=D.lang==='zh';
-const t=k=>({title:zh?'Claude Code 完整报告':'Claude Code Full Report',
+const t=k=>({title:zh?'Claude Code 用量看板详情':'Claude Code Usage Dashboard',
 today:zh?'今日':'Today',total:zh?'累计费用':'Total Cost',sessions:zh?'会话':'Sessions',
 roi:'ROI',tokens:zh?'总 Tokens':'Total Tokens',avg:zh?'日均费用':'Daily Avg',
 daily:zh?'每日费用 & 消息趋势':'Daily Cost & Message Trend',
@@ -1155,16 +1155,20 @@ $('h5').textContent=t('limits');
 const ln={five_hour:'Session (5h)',seven_day:'Weekly (7d)',seven_day_sonnet:'Sonnet',seven_day_opus:'Opus'};
 const le=Object.entries(D.limits);
 if(le.length>0){const gd=le.map(([k,v])=>({name:ln[k]||k,value:Math.round(v.util)}));
-const n=gd.length;const cols=Math.min(n,2);const rows=Math.ceil(n/cols);
+const n=gd.length;
+// Pre-compute positions: 1→center, 2→left/right, 3→top-left/top-right/bottom-center, 4→2x2 grid
+const pos=n===1?[['50%','55%']]:n===2?[['30%','55%'],['70%','55%']]:n===3?[['25%','40%'],['75%','40%'],['50%','85%']]:
+[['28%','38%'],['72%','38%'],['28%','82%'],['72%','82%']];
+const rd=n<=2?'38%':n===3?'30%':'28%';
+const fs=n<=2?18:15;
 echarts.init($('c5')).setOption({
 series:gd.map((g,i)=>({type:'gauge',startAngle:200,endAngle:-20,
-center:[((i%cols)+0.5)/(cols)*100+'%',((Math.floor(i/cols)+0.5)/rows)*100+'%'],
-radius:(45/Math.max(rows,1))+'%',min:0,max:100,
-axisLine:{lineStyle:{width:10,color:[[.6,C.t],[.8,C.w],[1,C.d]]}},
+center:pos[i]||['50%','50%'],radius:rd,min:0,max:100,
+axisLine:{lineStyle:{width:n<=2?10:8,color:[[.6,C.t],[.8,C.w],[1,C.d]]}},
 pointer:{show:false},axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
-progress:{show:true,width:10,roundCap:true},
-detail:{fontSize:18,color:'#e6edf3',offsetCenter:[0,'-5%'],formatter:'{value}%'},
-title:{fontSize:10,color:'#8b949e',offsetCenter:[0,'25%']},data:[g]}))
+progress:{show:true,width:n<=2?10:8,roundCap:true},
+detail:{fontSize:fs,color:'#e6edf3',offsetCenter:[0,'-5%'],formatter:'{value}%'},
+title:{fontSize:n<=2?10:9,color:'#8b949e',offsetCenter:[0,'28%']},data:[g]}))
 });}else{$('c5').textContent='No data';$('c5').className='empty';}
 
 // 3. Hourly Activity (gradient bars)
