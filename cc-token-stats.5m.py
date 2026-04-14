@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.1.1.0"
+VERSION = "1.2.0.0"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -111,7 +111,7 @@ STRINGS = {
     "dim_auto":    {"en":"Automation","zh":"自动化","es":"Automatización","fr":"Automatisation","ja":"自動化"},
     "dim_scale":   {"en":"Scale","zh":"规模化","es":"Escala","fr":"Échelle","ja":"スケール"},
     "burn_rate":   {"en":"~{0}min to rate limit","zh":"约{0}分钟后限速","es":"~{0}min al límite","fr":"~{0}min avant limite","ja":"約{0}分で制限"},
-    "dashboard":   {"en":"📊 Dashboard","zh":"📊 可视化面板","es":"📊 Panel","fr":"📊 Tableau de bord","ja":"📊 ダッシュボード"},
+    "report":      {"en":"📊 View Full Report","zh":"📊 查看完整报告","es":"📊 Ver informe","fr":"📊 Voir le rapport","ja":"📊 レポートを見る"},
     "trend_vs":    {"en":"vs 30d avg","zh":"对比 30 天均值","es":"vs prom. 30d","fr":"vs moy. 30j","ja":"30日平均比"},
     "extra":       {"en":"Extra","zh":"额外用量","es":"Extra","fr":"Extra","ja":"追加"},
 }
@@ -947,9 +947,22 @@ def generate_dashboard():
     machine_data = [{"name": m.get("machine", "?"), "cost": round(m.get("cost", 0), 2),
                      "sessions": m.get("sessions", 0)} for m in machines]
     model_display = {}
+    model_msgs = {}
     for k, v in models.items():
         short = MODEL_SHORT.get(k, k.split("-")[-1] if "-" in k else k[:15])
         model_display[short] = round(v["cost"], 2)
+        model_msgs[short] = v["msgs"]
+
+    # Token composition
+    total_inp = sum(m.get("inp", 0) + m.get("input_tokens", 0) for m in machines)
+    total_out = sum(m.get("out", 0) + m.get("output_tokens", 0) for m in machines)
+    total_cw = sum(m.get("cw", 0) + m.get("cache_write_tokens", 0) for m in machines)
+    total_cr = sum(m.get("cr", 0) + m.get("cache_read_tokens", 0) for m in machines)
+    total_tokens = total_inp + total_out + total_cw + total_cr
+
+    # Daily average
+    active_days = len([v for v in daily.values() if v.get("cost", 0) > 0])
+    daily_avg = round(tc / max(active_days, 1), 2)
     limits = {}
     if usage:
         for key in ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"]:
@@ -969,14 +982,17 @@ def generate_dashboard():
                "cost": round(tc, 2), "multiplier": round(tc / paid, 1)}
 
     payload = json.dumps({
-        "daily": {k: round(v["cost"], 2) for k, v in sorted(daily.items())},
-        "daily_msgs": {k: v["msgs"] for k, v in sorted(daily.items())},
+        "daily": {k: {"cost": round(v["cost"], 2), "msgs": v["msgs"], "tokens": v["tokens"]}
+                  for k, v in sorted(daily.items()) if v.get("cost", 0) > 0 or v.get("msgs", 0) > 0},
         "hourly": {str(k): v for k, v in sorted(hourly.items())},
-        "models": model_display,
-        "projects": {k: round(v["cost"], 2) for k, v in sorted(projects.items(), key=lambda x: -x[1]["cost"])[:15]},
+        "models": model_display, "model_msgs": model_msgs,
+        "projects": {k: {"cost": round(v["cost"], 2), "msgs": v["msgs"]}
+                     for k, v in sorted(projects.items(), key=lambda x: -x[1]["cost"])[:15]},
         "machines": machine_data, "limits": limits, "roi": roi,
         "today": {"cost": round(today.get("cost", 0), 2), "msgs": today.get("msgs", 0)},
-        "total": {"cost": round(tc, 2), "sessions": ts},
+        "total": {"cost": round(tc, 2), "sessions": ts, "tokens": total_tokens,
+                  "inp": total_inp, "out": total_out, "cw": total_cw, "cr": total_cr},
+        "daily_avg": daily_avg, "active_days": active_days,
         "lang": LANG, "generated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }, ensure_ascii=False)
 
@@ -990,7 +1006,6 @@ def generate_dashboard():
 def _build_dashboard_html(payload):
     """Build self-contained HTML string for dashboard. All data comes from trusted local caches.
     Uses string.replace() instead of f-string to avoid brace escaping nightmares with JS."""
-    # Template uses __DATA__ as the only placeholder — no f-string, so JS braces are safe
     template = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Claude Code Dashboard</title>
@@ -1000,125 +1015,185 @@ def _build_dashboard_html(payload):
 body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif}
 .header{padding:24px 32px 8px;display:flex;justify-content:space-between;align-items:baseline}
 .header h1{font-size:22px;color:#e6edf3;font-weight:600}.header .meta{color:#8b949e;font-size:12px}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;padding:16px 32px 32px;max-width:1440px;margin:0 auto}
-.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px}
-.s3{grid-column:span 3}.s4{grid-column:span 4}.s6{grid-column:span 6}.s8{grid-column:span 8}.s12{grid-column:span 12}
-.kpi{text-align:center}.kpi .v{font-size:28px;font-weight:700;color:#e6edf3;margin:8px 0 4px}
-.kpi .l{font-size:12px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
-.kpi .s{font-size:12px;color:#8b949e;margin-top:2px}
-.kpi.c1 .v{color:#58d4ab}.kpi.c2 .v{color:#58a6ff}.kpi.c3 .v{color:#d4a04a}.kpi.c4 .v{color:#3fb950}
-.ch{width:100%;height:280px}.cht{width:100%;height:320px}
-h3{font-size:13px;color:#8b949e;font-weight:500;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
-.empty{color:#484f58;text-align:center;padding-top:100px}
-@media(max-width:900px){.grid{grid-template-columns:repeat(6,1fr)}.s3{grid-column:span 3}.s8,.s6,.s4{grid-column:span 6}}
-@media(max-width:600px){.grid{grid-template-columns:1fr;padding:12px}.s3,.s4,.s6,.s8,.s12{grid-column:span 1}}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;padding:14px 32px 32px;max-width:1440px;margin:0 auto}
+.card{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:18px}
+.s2{grid-column:span 2}.s3{grid-column:span 3}.s4{grid-column:span 4}.s6{grid-column:span 6}.s8{grid-column:span 8}.s12{grid-column:span 12}
+.kpi{text-align:center;padding:12px 8px}.kpi .v{font-size:24px;font-weight:700;color:#e6edf3;margin:6px 0 3px}
+.kpi .l{font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px}
+.kpi .u{font-size:11px;color:#8b949e;margin-top:2px}
+.kpi.c1 .v{color:#58d4ab}.kpi.c2 .v{color:#58a6ff}.kpi.c3 .v{color:#d4a04a}
+.kpi.c4 .v{color:#3fb950}.kpi.c5 .v{color:#a371f7}.kpi.c6 .v{color:#d2a8ff}
+.ch{width:100%;height:270px}.cht{width:100%;height:300px}
+h3{font-size:12px;color:#8b949e;font-weight:500;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
+.empty{color:#484f58;text-align:center;padding-top:80px;font-size:13px}
+@media(max-width:900px){.grid{grid-template-columns:repeat(6,1fr)}.s2{grid-column:span 3}.s8,.s6,.s4{grid-column:span 6}}
+@media(max-width:600px){.grid{grid-template-columns:1fr;padding:12px}[class*="s"]{grid-column:span 1}}
 </style></head><body>
 <div class="header"><h1 id="T"></h1><span class="meta" id="G"></span></div>
 <div class="grid">
-<div class="card s3 kpi c1"><div class="l" id="k1l"></div><div class="v" id="k1v"></div><div class="s" id="k1s"></div></div>
-<div class="card s3 kpi c2"><div class="l" id="k2l"></div><div class="v" id="k2v"></div><div class="s" id="k2s"></div></div>
-<div class="card s3 kpi c3"><div class="l" id="k3l"></div><div class="v" id="k3v"></div><div class="s" id="k3s"></div></div>
-<div class="card s3 kpi c4"><div class="l" id="k4l"></div><div class="v" id="k4v"></div><div class="s" id="k4s"></div></div>
-<div class="card s8"><h3 id="h1"></h3><div id="c1" class="ch"></div></div>
+<!-- 6 KPI cards -->
+<div class="card s2 kpi c1"><div class="l" id="k1l"></div><div class="v" id="k1v"></div><div class="u" id="k1u"></div></div>
+<div class="card s2 kpi c2"><div class="l" id="k2l"></div><div class="v" id="k2v"></div><div class="u" id="k2u"></div></div>
+<div class="card s2 kpi c3"><div class="l" id="k3l"></div><div class="v" id="k3v"></div><div class="u" id="k3u"></div></div>
+<div class="card s2 kpi c4"><div class="l" id="k4l"></div><div class="v" id="k4v"></div><div class="u" id="k4u"></div></div>
+<div class="card s2 kpi c5"><div class="l" id="k5l"></div><div class="v" id="k5v"></div><div class="u" id="k5u"></div></div>
+<div class="card s2 kpi c6"><div class="l" id="k6l"></div><div class="v" id="k6v"></div><div class="u" id="k6u"></div></div>
+<!-- Row 2: Daily trend (dual axis) full width -->
+<div class="card s12"><h3 id="h1"></h3><div id="c1" class="ch"></div></div>
+<!-- Row 3: Model + Token composition + Rate limits -->
 <div class="card s4"><h3 id="h2"></h3><div id="c2" class="ch"></div></div>
+<div class="card s4"><h3 id="h7"></h3><div id="c7" class="ch"></div></div>
+<div class="card s4"><h3 id="h5"></h3><div id="c5" class="ch"></div></div>
+<!-- Row 4: Hourly + Projects -->
 <div class="card s6"><h3 id="h3"></h3><div id="c3" class="ch"></div></div>
 <div class="card s6"><h3 id="h4"></h3><div id="c4" class="ch"></div></div>
-<div class="card s6"><h3 id="h5"></h3><div id="c5" class="cht"></div></div>
-<div class="card s6"><h3 id="h6"></h3><div id="c6" class="ch"></div></div>
+<!-- Row 5: Machines + Daily detail table -->
+<div class="card s4"><h3 id="h6"></h3><div id="c6" class="ch"></div></div>
+<div class="card s8"><h3 id="h8"></h3><div id="c8" style="max-height:270px;overflow-y:auto"></div></div>
 </div>
 <script>
 const D=__DATA__;
 const zh=D.lang==='zh';
-const t=k=>({title:zh?'Claude Code 可视化面板':'Claude Code Dashboard',today:zh?'今日费用':'Today',
-total:zh?'累计费用':'Total Cost',sessions:zh?'会话数':'Sessions',roi:'ROI',
-daily:zh?'每日费用趋势':'Daily Cost Trend',model:zh?'模型分布':'Model Distribution',
-hourly:zh?'活跃时段':'Hourly Activity',project:zh?'项目排行':'Top Projects',
-limits:zh?'用量限额':'Rate Limits',machines:zh?'设备':'Machines',
-msgs:zh?'消息':'msgs',days:zh?'天':'days'})[k]||k;
+const t=k=>({title:zh?'Claude Code 完整报告':'Claude Code Full Report',
+today:zh?'今日':'Today',total:zh?'累计费用':'Total Cost',sessions:zh?'会话':'Sessions',
+roi:'ROI',tokens:zh?'总 Tokens':'Total Tokens',avg:zh?'日均费用':'Daily Avg',
+daily:zh?'每日费用 & 消息趋势':'Daily Cost & Message Trend',
+model:zh?'模型费用分布':'Model Cost Distribution',
+token_comp:zh?'Token 构成':'Token Composition',
+hourly:zh?'24 小时活跃分布':'24-Hour Activity',project:zh?'项目费用排行':'Project Cost Ranking',
+limits:zh?'用量限额':'Rate Limits',machines:zh?'设备费用对比':'Machine Cost Comparison',
+detail:zh?'每日明细':'Daily Breakdown',
+cost:zh?'费用':'Cost',msgs:zh?'消息':'Msgs',days:zh?'天':'days',
+input:zh?'输入':'Input',output:zh?'输出':'Output',cache_w:zh?'缓存写':'Cache W',cache_r:zh?'缓存读':'Cache R'
+})[k]||k;
 const fc=n=>n>=1e4?'$'+n.toLocaleString('en',{maximumFractionDigits:0}):'$'+n.toFixed(2);
+const fk=n=>n>=1e9?(n/1e9).toFixed(1)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'K':n;
 const C={p:'#58a6ff',t:'#58d4ab',g:'#d4a04a',d:'#f85149',w:'#d29922',op:'#a371f7',sn:'#58a6ff',hk:'#3fb950',m:'#484f58'};
 const tt={backgroundColor:'#1c2128',borderColor:'#30363d',textStyle:{color:'#c9d1d9'}};
-const ax={axisLine:{lineStyle:{color:'#30363d'}},splitLine:{lineStyle:{color:'#21262d'}},axisLabel:{color:'#8b949e',fontSize:11}};
+const ax={axisLine:{lineStyle:{color:'#30363d'}},splitLine:{lineStyle:{color:'#21262d'}},axisLabel:{color:'#8b949e',fontSize:10}};
+const $=id=>document.getElementById(id);
 
-document.getElementById('T').textContent=t('title');
-document.getElementById('G').textContent=D.generated;
-document.getElementById('k1l').textContent=t('today');
-document.getElementById('k1v').textContent=fc(D.today.cost);
-document.getElementById('k1s').textContent=D.today.msgs+' '+t('msgs');
-document.getElementById('k2l').textContent=t('total');
-document.getElementById('k2v').textContent=fc(D.total.cost);
-document.getElementById('k2s').textContent=Object.keys(D.daily).length+' '+t('days');
-document.getElementById('k3l').textContent=t('roi');
-if(D.roi.multiplier){document.getElementById('k3v').textContent=D.roi.multiplier+'x';document.getElementById('k3s').textContent=fc(D.roi.cost)+' / $'+D.roi.paid;}
-else{document.getElementById('k3v').textContent='\u2014';document.getElementById('k3s').textContent='';}
-document.getElementById('k4l').textContent=t('sessions');
-document.getElementById('k4v').textContent=D.total.sessions.toLocaleString();
-document.getElementById('k4s').textContent=D.machines.length+' '+t('machines');
+// Header
+$('T').textContent=t('title');$('G').textContent=D.generated;
 
-document.getElementById('h1').textContent=t('daily');
-const dd=Object.keys(D.daily),dv=Object.values(D.daily);
-echarts.init(document.getElementById('c1')).setOption({
-tooltip:{...tt,trigger:'axis',formatter:p=>p[0].name+'<br/>'+fc(p[0].value)},
+// 6 KPI Cards
+$('k1l').textContent=t('today');$('k1v').textContent=fc(D.today.cost);$('k1u').textContent=D.today.msgs+' '+t('msgs');
+$('k2l').textContent=t('total');$('k2v').textContent=fc(D.total.cost);$('k2u').textContent=D.active_days+' '+t('days');
+$('k3l').textContent=t('roi');
+if(D.roi.multiplier){$('k3v').textContent=D.roi.multiplier+'x';$('k3u').textContent=fc(D.roi.cost)+' / $'+D.roi.paid;}
+else{$('k3v').textContent='\u2014';$('k3u').textContent='';}
+$('k4l').textContent=t('sessions');$('k4v').textContent=D.total.sessions.toLocaleString();$('k4u').textContent=D.machines.length+' machines';
+$('k5l').textContent=t('tokens');$('k5v').textContent=fk(D.total.tokens);$('k5u').textContent='in+out+cache';
+$('k6l').textContent=t('avg');$('k6v').textContent=fc(D.daily_avg);$('k6u').textContent='/day';
+
+// 1. Daily Cost + Messages (dual Y axis, full width)
+$('h1').textContent=t('daily');
+const dd=Object.keys(D.daily),dCost=dd.map(d=>D.daily[d].cost),dMsgs=dd.map(d=>D.daily[d].msgs);
+echarts.init($('c1')).setOption({
+tooltip:{...tt,trigger:'axis',formatter:p=>{let s=p[0].name;p.forEach(x=>{s+='<br/>'+x.marker+x.seriesName+': '+(x.seriesIndex===0?fc(x.value):x.value);});return s;}},
+legend:{data:[t('cost'),t('msgs')],textStyle:{color:'#8b949e'},top:0,right:60},
 xAxis:{type:'category',data:dd,...ax,axisLabel:{...ax.axisLabel,formatter:v=>v.slice(5)}},
-yAxis:{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>'$'+v}},
-series:[{type:'line',data:dv,smooth:true,symbol:'none',lineStyle:{color:C.t,width:2},
-areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(88,212,171,0.25)'},{offset:1,color:'rgba(88,212,171,0.02)'}])},
-itemStyle:{color:C.t}}],
-dataZoom:[{type:'inside'},{type:'slider',height:20,bottom:0,borderColor:'#30363d',backgroundColor:'#161b22',
+yAxis:[{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>'$'+v}},
+{type:'value',...ax,axisLabel:{...ax.axisLabel},splitLine:{show:false}}],
+series:[
+{name:t('cost'),type:'bar',data:dCost,barWidth:'60%',itemStyle:{color:C.t,borderRadius:[3,3,0,0]},yAxisIndex:0},
+{name:t('msgs'),type:'line',data:dMsgs,smooth:true,symbol:'none',lineStyle:{color:C.p,width:2},yAxisIndex:1}],
+dataZoom:[{type:'inside'},{type:'slider',height:18,bottom:0,borderColor:'#30363d',backgroundColor:'#161b22',
 fillerColor:'rgba(88,212,171,0.1)',handleStyle:{color:'#58d4ab'},textStyle:{color:'#8b949e'}}],
-grid:{left:50,right:16,top:10,bottom:40}});
+grid:{left:55,right:55,top:30,bottom:38}});
 
-document.getElementById('h2').textContent=t('model');
-const mc={};Object.keys(D.models).forEach(k=>{const l=k.toLowerCase();mc[k]=l.includes('opus')?C.op:l.includes('haiku')?C.hk:C.sn;});
-echarts.init(document.getElementById('c2')).setOption({
+// 2. Model Distribution (donut)
+$('h2').textContent=t('model');
+const mClr={};Object.keys(D.models).forEach(k=>{const l=k.toLowerCase();mClr[k]=l.includes('opus')?C.op:l.includes('haiku')?C.hk:C.sn;});
+echarts.init($('c2')).setOption({
 tooltip:{...tt,formatter:p=>p.name+': '+fc(p.value)+' ('+p.percent+'%)'},
-series:[{type:'pie',radius:['42%','70%'],center:['50%','55%'],
-label:{color:'#c9d1d9',fontSize:11,formatter:'{b}\n{d}%'},
-data:Object.entries(D.models).map(([k,v])=>({name:k,value:v,itemStyle:{color:mc[k]||C.m}}))}]});
+series:[{type:'pie',radius:['40%','68%'],center:['50%','55%'],
+label:{color:'#c9d1d9',fontSize:10,formatter:'{b}\n{d}%'},
+data:Object.entries(D.models).map(([k,v])=>({name:k,value:v,itemStyle:{color:mClr[k]||C.m}}))}]});
 
-document.getElementById('h3').textContent=t('hourly');
-const hrs=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
-const hv=hrs.map(h=>D.hourly[String(parseInt(h))]||0);
-echarts.init(document.getElementById('c3')).setOption({
-tooltip:{...tt,formatter:p=>p.name+':00 \u2014 '+p.value+' '+t('msgs')},
-xAxis:{type:'category',data:hrs.map(h=>h+':00'),...ax,axisLabel:{...ax.axisLabel,interval:2}},
-yAxis:{type:'value',...ax},
-series:[{type:'bar',data:hv.map(v=>({value:v,itemStyle:{color:v>0?C.p:C.m,borderRadius:[3,3,0,0]}})),barWidth:'60%'}],
-grid:{left:40,right:16,top:10,bottom:30}});
+// 7. Token Composition (horizontal stacked bar)
+$('h7').textContent=t('token_comp');
+const tk=D.total;
+echarts.init($('c7')).setOption({
+tooltip:{...tt,formatter:p=>{let s='';p.forEach(x=>{s+=x.marker+x.seriesName+': '+fk(x.value)+'<br/>';});return s;}},
+legend:{data:[t('input'),t('output'),t('cache_w'),t('cache_r')],textStyle:{color:'#8b949e',fontSize:10},top:0},
+xAxis:{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>fk(v)}},
+yAxis:{type:'category',data:['Tokens'],...ax,show:false},
+series:[
+{name:t('input'),type:'bar',stack:'t',data:[tk.inp],itemStyle:{color:'#58a6ff'},barWidth:40},
+{name:t('output'),type:'bar',stack:'t',data:[tk.out],itemStyle:{color:'#58d4ab'}},
+{name:t('cache_w'),type:'bar',stack:'t',data:[tk.cw],itemStyle:{color:'#d4a04a'}},
+{name:t('cache_r'),type:'bar',stack:'t',data:[tk.cr],itemStyle:{color:'#a371f7'}}],
+grid:{left:10,right:16,top:35,bottom:10}});
 
-document.getElementById('h4').textContent=t('project');
-const pe=Object.entries(D.projects).slice(0,10),pn=pe.map(e=>e[0]).reverse(),pc=pe.map(e=>e[1]).reverse();
-echarts.init(document.getElementById('c4')).setOption({
-tooltip:{...tt,formatter:p=>p.name+': '+fc(p.value)},
-xAxis:{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>'$'+v}},
-yAxis:{type:'category',data:pn,...ax,axisLabel:{...ax.axisLabel,width:80,overflow:'truncate'}},
-series:[{type:'bar',data:pc,barWidth:'60%',itemStyle:{color:C.g,borderRadius:[0,4,4,0]},
-label:{show:true,position:'right',color:'#8b949e',fontSize:10,formatter:p=>fc(p.value)}}],
-grid:{left:90,right:60,top:10,bottom:20}});
-
-document.getElementById('h5').textContent=t('limits');
+// 5. Rate Limits (gauges)
+$('h5').textContent=t('limits');
 const ln={five_hour:'Session (5h)',seven_day:'Weekly (7d)',seven_day_sonnet:'Sonnet',seven_day_opus:'Opus'};
 const le=Object.entries(D.limits);
 if(le.length>0){const gd=le.map(([k,v])=>({name:ln[k]||k,value:Math.round(v.util)}));
-echarts.init(document.getElementById('c5')).setOption({
+const n=gd.length;const cols=Math.min(n,2);const rows=Math.ceil(n/cols);
+echarts.init($('c5')).setOption({
 series:gd.map((g,i)=>({type:'gauge',startAngle:200,endAngle:-20,
-center:[(i%2===0?'28%':'72%'),(i<2?'40%':'88%')],radius:'42%',min:0,max:100,
-axisLine:{lineStyle:{width:12,color:[[.6,C.t],[.8,C.w],[1,C.d]]}},
+center:[((i%cols)+0.5)/(cols)*100+'%',((Math.floor(i/cols)+0.5)/rows)*100+'%'],
+radius:(45/Math.max(rows,1))+'%',min:0,max:100,
+axisLine:{lineStyle:{width:10,color:[[.6,C.t],[.8,C.w],[1,C.d]]}},
 pointer:{show:false},axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
-progress:{show:true,width:12,roundCap:true},
-detail:{fontSize:20,color:'#e6edf3',offsetCenter:[0,'-5%'],formatter:'{value}%'},
-title:{fontSize:11,color:'#8b949e',offsetCenter:[0,'25%']},data:[g]}))
-});}else{document.getElementById('c5').textContent='No rate limit data';document.getElementById('c5').className='empty';}
+progress:{show:true,width:10,roundCap:true},
+detail:{fontSize:18,color:'#e6edf3',offsetCenter:[0,'-5%'],formatter:'{value}%'},
+title:{fontSize:10,color:'#8b949e',offsetCenter:[0,'25%']},data:[g]}))
+});}else{$('c5').textContent='No data';$('c5').className='empty';}
 
-document.getElementById('h6').textContent=t('machines');
-if(D.machines.length>1){echarts.init(document.getElementById('c6')).setOption({
+// 3. Hourly Activity (gradient bars)
+$('h3').textContent=t('hourly');
+const hrs=Array.from({length:24},(_,i)=>String(i).padStart(2,'0'));
+const hv=hrs.map(h=>D.hourly[String(parseInt(h))]||0);
+const hMax=Math.max(...hv,1);
+echarts.init($('c3')).setOption({
+tooltip:{...tt,formatter:p=>p.name+':00 \u2014 '+p.value+' '+t('msgs')},
+xAxis:{type:'category',data:hrs.map(h=>h+':00'),...ax,axisLabel:{...ax.axisLabel,interval:2}},
+yAxis:{type:'value',...ax},
+series:[{type:'bar',data:hv.map(v=>{const r=v/hMax;return{value:v,itemStyle:{color:r>0.8?C.t:r>0.5?C.p:r>0?'#3a6ea5':C.m,borderRadius:[3,3,0,0]}};}),barWidth:'55%'}],
+grid:{left:45,right:12,top:10,bottom:28}});
+
+// 4. Project Ranking (horizontal bar)
+$('h4').textContent=t('project');
+const pe=Object.entries(D.projects).slice(0,10).map(([k,v])=>[k,v.cost]);
+const pn=pe.map(e=>e[0]).reverse(),pc=pe.map(e=>e[1]).reverse();
+echarts.init($('c4')).setOption({
+tooltip:{...tt,formatter:p=>p.name+': '+fc(p.value)},
+xAxis:{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>'$'+v}},
+yAxis:{type:'category',data:pn,...ax,axisLabel:{...ax.axisLabel,width:75,overflow:'truncate'}},
+series:[{type:'bar',data:pc,barWidth:'55%',itemStyle:{color:C.g,borderRadius:[0,4,4,0]},
+label:{show:true,position:'right',color:'#8b949e',fontSize:9,formatter:p=>fc(p.value)}}],
+grid:{left:85,right:55,top:8,bottom:15}});
+
+// 6. Machines (bar)
+$('h6').textContent=t('machines');
+if(D.machines.length>1){echarts.init($('c6')).setOption({
 tooltip:{...tt},
-xAxis:{type:'category',data:D.machines.map(m=>m.name),...ax},
+xAxis:{type:'category',data:D.machines.map(m=>m.name),...ax,axisLabel:{...ax.axisLabel,fontSize:9}},
 yAxis:{type:'value',...ax,axisLabel:{...ax.axisLabel,formatter:v=>'$'+v}},
 series:[{type:'bar',data:D.machines.map(m=>({value:m.cost,itemStyle:{color:C.t,borderRadius:[4,4,0,0]}})),
-barWidth:'50%',label:{show:true,position:'top',color:'#8b949e',fontSize:11,formatter:p=>fc(p.value)}}],
-grid:{left:50,right:16,top:30,bottom:30}});}
-else{document.getElementById('c6').textContent='Single machine';document.getElementById('c6').className='empty';}
+barWidth:'45%',label:{show:true,position:'top',color:'#8b949e',fontSize:10,formatter:p=>fc(p.value)}}],
+grid:{left:50,right:12,top:25,bottom:28}});}
+else{$('c6').textContent='Single machine';$('c6').className='empty';}
+
+// 8. Daily Detail Table
+$('h8').textContent=t('detail');
+const tbl=document.createElement('table');
+tbl.style.cssText='width:100%;border-collapse:collapse;font-size:12px;font-family:Menlo,monospace';
+const hdr=tbl.insertRow();
+[zh?'日期':'Date',zh?'费用':'Cost',zh?'消息':'Msgs',zh?'Tokens':'Tokens'].forEach(h=>{
+const th=document.createElement('th');th.textContent=h;
+th.style.cssText='text-align:right;padding:5px 8px;color:#8b949e;border-bottom:1px solid #30363d;font-weight:500';
+if(h===(zh?'日期':'Date'))th.style.textAlign='left';hdr.appendChild(th);});
+Object.entries(D.daily).reverse().forEach(([d,v])=>{
+const row=tbl.insertRow();
+[d.slice(5),fc(v.cost),v.msgs.toLocaleString(),fk(v.tokens)].forEach((val,i)=>{
+const td=row.insertCell();td.textContent=val;
+td.style.cssText='padding:4px 8px;border-bottom:1px solid #21262d;color:#c9d1d9;text-align:right';
+if(i===0)td.style.textAlign='left';});});
+$('c8').appendChild(tbl);
 
 window.addEventListener('resize',()=>{document.querySelectorAll('.ch,.cht').forEach(el=>{const c=echarts.getInstanceByDom(el);if(c)c.resize();});});
 </script></body></html>"""
@@ -1489,79 +1564,10 @@ def main():
     # DRILL-DOWN — clean, minimal, data-focused
     # ═══════════════════════════════════════════════════════════════
 
-    # Section header style
-    SH = "color=#5CC6A7 size=12" if DARK else "color=#1A5C4C size=12"
+    # ── Details → Dashboard report link ──
     details_label = t("details")
     print(f"── {details_label} ── | {ST}")
-
-    # ── Daily Details (newest first, max 15 visible, older folded) ──
-    all_total_cost = sum(v["cost"] for v in daily.values())
-    all_total_msgs = sum(v["msgs"] for v in daily.values())
-    active_days = [(d, v) for d, v in reversed(daily_sorted) if v["msgs"] > 0]
-    day_count = len(active_days)
-    print(f"{t('daily')} | {SH}")
-    all_total_tokens = sum(v["tokens"] for v in daily.values())
-    # Show recent 15
-    for date, data in active_days[:15]:
-        dd = date[5:]
-        print(f"--{dd}   {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
-    # Older days folded into submenu
-    if len(active_days) > 15:
-        older = active_days[15:]
-        older_cost = sum(v["cost"] for _, v in older)
-        older_tokens = sum(v["tokens"] for _, v in older)
-        older_msgs = sum(v["msgs"] for _, v in older)
-        print(f"--{t('older')} ({len(older)}d) {fc(older_cost)} · {tk(older_tokens)} · {older_msgs} msgs | {DIM}")
-        for date, data in older:
-            dd = date[5:]
-            print(f"----{dd}   {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
-    print("-----")
-    total_label = t("total")
-    print(f"--{total_label}   {fc(all_total_cost):>8}   {tk(all_total_tokens):>8}   {all_total_msgs:>5} msgs | {DIM}")
-
-    # ── Models ──
-    print(f"{t('models')} | {SH}")
-    for model, data in sorted(all_models.items(), key=lambda x: -x[1]["cost"]):
-        short = MODEL_SHORT.get(model, model)
-        pct = data["msgs"] / total_model_msgs * 100
-        print(f"--{short:<12} {pct:>3.0f}%   {fc(data['cost']):>8}   {data['msgs']:>6,} msgs | {ROW2}")
-
-    # ── Hourly Activity ──
-    hourly = local["hourly"]
-    if hourly:
-        print(f"{t('hours')} | {SH}")
-        total_hourly = max(sum(hourly.values()), 1)
-        max_h = max(hourly.values()) if hourly else 1
-        # Spark bars: ▁▂▃▄▅▆▇█ — each char = 1 hour, height = relative activity
-        sparks = " ▁▂▃▄▅▆▇█"
-        def spark(h):
-            v = hourly.get(h, 0)
-            if v == 0: return "▁"
-            level = min(int(v / max_h * 8) + 1, 8)
-            return sparks[level]
-
-        block_defs = [
-            (t("am"),   "06–12", range(6, 12)),
-            (t("pm"),   "12–18", range(12, 18)),
-            (t("eve"),  "18–24", range(18, 24)),
-            (t("late"), "00–06", range(0, 6)),
-        ]
-        for label, time_str, hours in block_defs:
-            count = sum(hourly.get(h, 0) for h in hours)
-            if count == 0: continue
-            pct = count / total_hourly * 100
-            sparkline = "".join(spark(h) for h in hours)
-            msgs_u = t("msgs")
-            print(f"--{label} {time_str}  {sparkline}  {count:>5,} {msgs_u} {pct:>2.0f}% | {ROW2}")
-
-    # ── Top Projects ──
-    projects = dict(local["projects"])
-    if projects:
-        print(f"{t('projects')} | {SH}")
-        top = sorted(projects.items(), key=lambda x: -x[1]["cost"])[:8]
-        for name, data in top:
-            short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
-            print(f"--{short_name}  {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")
+    print(f"{t('report')} | bash={helper} param1=dashboard terminal=false")
 
     # ═══ USER LEVEL ═══
     print("---")
@@ -1675,9 +1681,6 @@ esac
 """)
         os.chmod(helper, 0o755)
     except Exception: pass
-
-    # 📊 Dashboard link
-    print(f"{t('dashboard')} | bash={helper} param1=dashboard terminal=false")
 
     # ⚙️ Settings — all toggles collapsed into one submenu
     settings_label = t("settings")
