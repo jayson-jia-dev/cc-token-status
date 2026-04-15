@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.2.0.1"
+VERSION = "1.2.0.2"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -677,14 +677,15 @@ def get_usage():
         else:
             delay = min(600 * (2 ** (new_count - 1)), 3600)
         _save_backoff(now_ts + delay, new_count)
-        err = "rate_limit"  # normalize for downstream
+        remaining_min = max(1, int(delay / 60 + 0.5))
+        err = f"backoff:{remaining_min}"  # show cooldown hint, not error
     # Fallback to stale cache — 2 hours
     if USAGE_CACHE.is_file():
         try:
             stale = json.loads(USAGE_CACHE.read_text())
             stale_age = now_ts - stale.get("_ts", 0)
             if stale_age < 7200:
-                return stale, ("rate_limit" if err == "rate_limit" else None)
+                return stale, err
         except Exception: pass
     return None, err
 
