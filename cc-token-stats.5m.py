@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.3.0.1"
+VERSION = "1.3.0.2"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -1684,7 +1684,7 @@ var cost=D.total.cost;var sessions=D.total.sessions;
 var lateCount=0;for(var h=0;h<=4;h++)lateCount+=(hourly[String(h)]||0);
 // Opus percentage
 var modelTotal=Object.values(models).reduce(function(a,b){return a+b;},0)||1;
-var opusPct=0;for(var m in models){if(m.toLowerCase().indexOf('opus')>=0)opusPct=models[m]/modelTotal*100;}
+var opusPct=0;for(var m in models){if(m.toLowerCase().indexOf('opus')>=0)opusPct+=models[m]/modelTotal*100;}
 // Max session msgs (from sessions_by_day)
 var maxSessMsgs=0;var sbd=D.sessions_by_day||{};
 for(var d in sbd){sbd[d].forEach(function(s){if(s.msgs>maxSessMsgs)maxSessMsgs=s.msgs;});}
