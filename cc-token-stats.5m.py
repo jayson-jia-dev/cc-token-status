@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.3.0.0"
+VERSION = "1.3.0.1"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -150,6 +150,7 @@ PRICING = {
     "haiku":     {"input": 1,    "output": 5,  "cache_write": 2,     "cache_read": 0.10},
 }
 MODEL_SHORT = {
+    "claude-opus-4-7":"Opus 4.7",
     "claude-opus-4-6":"Opus 4.6","claude-opus-4-5-20250918":"Opus 4.5",
     "claude-sonnet-4-6":"Sonnet 4.6","claude-sonnet-4-5-20250929":"Sonnet 4.5",
     "claude-haiku-4-5-20251001":"Haiku 4.5",
