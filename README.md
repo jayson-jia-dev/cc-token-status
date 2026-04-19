@@ -29,6 +29,9 @@
 <p align="center">
   <img src=".github/screenshot-dashboard-bottom.png" width="800" alt="Dashboard — activity heatmap, project ranking, machines, daily details" />
 </p>
+<p align="center">
+  <img src=".github/screenshot-dashboard-level.png" width="800" alt="Dashboard — user level, dimension scores, cost equivalents, achievements" />
+</p>
 
 ## Quick Install
 
