@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.3.3"
+VERSION = "1.3.4"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -1064,27 +1064,30 @@ def recalc_remote_cost(data):
     """Recalculate remote machine cost using current pricing (not cached total_cost)."""
     total = 0.0
     mb = data.get("model_breakdown", {})
-    if mb:
+    inp = data.get("input_tokens", 0)
+    out = data.get("output_tokens", 0)
+    cw = data.get("cache_write_tokens", 0)
+    cr = data.get("cache_read_tokens", 0)
+    # Sum tokens across model_breakdown entries. If mb exists but every
+    # entry lacks the 'tokens' field (old/corrupt remote schema), the
+    # ratio method silently produces $0 for all models — so detect that
+    # case and fall through to the flat sonnet fallback below.
+    sum_tokens = sum(v.get("tokens", 0) for v in mb.values()) if mb else 0
+    if mb and sum_tokens > 0:
         # Has per-model breakdown — use token ratio (not msg ratio, since
         # Opus messages have far more tokens per msg than Haiku)
-        inp = data.get("input_tokens", 0)
-        out = data.get("output_tokens", 0)
-        cw = data.get("cache_write_tokens", 0)
-        cr = data.get("cache_read_tokens", 0)
-        total_tokens = max(sum(v.get("tokens", 0) for v in mb.values()), 1)
         for model, mdata in mb.items():
-            ratio = mdata.get("tokens", 0) / total_tokens
+            ratio = mdata.get("tokens", 0) / sum_tokens
             p = PRICING.get(tier(model), PRICING["sonnet"])
             model_cost = (inp * ratio * p["input"] + out * ratio * p["output"] +
                           cw * ratio * p["cache_write"] + cr * ratio * p["cache_read"]) / 1e6
             total += model_cost
             mdata["cost"] = round(model_cost, 2)
     else:
-        # Fallback: assume sonnet pricing
-        inp = data.get("input_tokens", 0)
-        out = data.get("output_tokens", 0)
-        cw = data.get("cache_write_tokens", 0)
-        cr = data.get("cache_read_tokens", 0)
+        # Fallback: assume sonnet pricing.
+        # Triggers when: no model_breakdown, OR mb exists but all entries
+        # have tokens=0 (pre-v3 remote data written before per-model
+        # token tracking landed).
         p = PRICING["sonnet"]
         total = (inp * p["input"] + out * p["output"] + cw * p["cache_write"] + cr * p["cache_read"]) / 1e6
     data["total_cost"] = round(total, 2)
