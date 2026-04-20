@@ -6,7 +6,7 @@ set -euo pipefail
 
 REPO="https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 PLUGIN_NAME="cc-token-stats.5m.py"
-VERSION="1.4.2"
+VERSION="1.4.3"
 UPDATE_MODE=false
 
 # Parse args
