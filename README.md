@@ -70,7 +70,7 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 | **Multi-Machine Sync** | iCloud Drive auto-sync across Macs — zero config |
 | **Usage Alerts** | macOS notifications at 80% and 95% for Session/Weekly/Sonnet/Opus limits |
 | **Extra Usage** | Shows extra usage gauge with spent amount, monthly limit, and on/off status when enabled |
-| **Auto-Update** | SHA256-verified updates from GitHub, checks daily |
+| **Auto-Update** | Daily background check + on-demand "Check for Updates Now" menu button. SHA256-verified, proxy-aware (system HTTP/HTTPS proxy), downgrade-protected, atomic replace, self-heals stray plugin copies on every run |
 | **5 Languages** | EN, 中文, ES, FR, 日本語 — auto-detected from system |
 | **Dark & Light Mode** | Adapts color scheme to macOS appearance |
 
@@ -106,14 +106,14 @@ Scored across 5 dimensions (100 points total):
 │   ├─ get_usage()   → Anthropic OAuth API (4-min cache)      │
 │   │                  ↳ macOS Keychain → OAuth token          │
 │   ├─ save_sync()   → write to iCloud Drive                  │
-│   ├─ auto_update() → GitHub + SHA256 verify                 │
+│   ├─ auto_update() → GitHub + SHA256 (24h throttle)         │
 │   └─ check_and_notify() → macOS notifications               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 - **Token & cost** — scans Claude Code JSONL session logs with incremental caching (only re-parses changed files), calculates API-equivalent cost with official Anthropic pricing
 - **Plan limits** — reads OAuth token from macOS Keychain, queries `api.anthropic.com/api/oauth/usage` with smart caching (4-min fresh + 2-hour stale fallback, HTTP 429 graceful degradation)
-- **Auto-update** — downloads new versions from GitHub, verifies SHA256 checksum before replacing plugin file
+- **Auto-update** — daily GitHub check with SHA256 verification, atomic tmp+rename, system proxy fallback, downgrade-protected; failures logged to `~/.config/cc-token-stats/.update.log` for diagnosis
 - **Multi-machine sync** — writes stats to iCloud Drive, reads other machines' data automatically
 - **Dashboard** — generates self-contained HTML with embedded ECharts, opens in browser (12 panels, all data from local caches)
 - **Refresh** — SwiftBar executes the plugin every 5 minutes
@@ -138,17 +138,32 @@ Edit `~/.config/cc-token-stats/config.json` or use the in-app Settings menu:
 | `subscription_label` | `"Pro"`, `"Max"`, `"Team"` | `""` |
 | `language` | `"auto"`, `"en"`, `"zh"`, `"es"`, `"fr"`, `"ja"` | `"auto"` |
 | `notifications` | Usage limit alerts | `true` |
-| `auto_update` | Daily update check | `true` |
+| `auto_update` | Daily background update check (menu button "Check for Updates Now" still works when off) | `true` |
 | `sync_mode` | `"auto"` / `"off"` | `"auto"` |
 | `machine_labels` | Custom device names, e.g. `{"RL001":"Office"}` | `{}` |
 
 ## Update
 
-Auto-updates daily with SHA256 verification. Manual update:
+Three paths, same SHA256 verification and atomic replace:
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main/install.sh | bash -s -- --update
-```
+1. **Automatic** — daily background check, no action needed (default)
+2. **Menu button** — Settings → "Check for Updates Now" (bypasses the 24h throttle, shows result as a notification)
+3. **Reinstall script**:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main/install.sh | bash -s -- --update
+   ```
+
+Update diagnostics live at `~/.config/cc-token-stats/.update.log` (rotated at 50 KB).
+
+## Versioning
+
+Standard 3-segment [SemVer](https://semver.org):
+
+- **MAJOR** — breaking config or behavior change
+- **MINOR** — new user-facing feature (menu item, setting, dashboard panel)
+- **PATCH** — bug fix or internal hardening
+
+See [Releases](https://github.com/jayson-jia-dev/cc-token-status/releases) for per-version notes.
 
 ## Uninstall
 
