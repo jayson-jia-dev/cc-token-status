@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -146,11 +146,24 @@ SYNC_DIR, SYNC_TYPE = resolve_sync()
 # Opus 4.0/4.1: $15/$75 (legacy)
 # Sonnet 4.5/4.6: $3/$15
 # Haiku 4.5: $1/$5
+# Anthropic API pricing (USD per 1M tokens).
+# Source: https://platform.claude.com/docs/en/about-claude/pricing
+#
+# Cache write has TWO tiers tied to the message's TTL hint:
+#   - 5m ephemeral cache: input × 1.25
+#   - 1h ephemeral cache: input × 2
+# Claude Code defaults to 1h (empirically verified: usage.cache_creation
+# shows ephemeral_1h_input_tokens filled, ephemeral_5m at 0 on real
+# sessions). Either TTL can appear on any given message so scan() must
+# read the split from usage.cache_creation when present and price each
+# bucket independently. The flat cache_creation_input_tokens field is
+# the sum of both and is priced at 1h as a conservative fallback when
+# the split isn't available (older JSONLs without the nested object).
 PRICING = {
-    "opus_new":  {"input": 5,    "output": 25, "cache_write": 10,    "cache_read": 0.50},
-    "opus_old":  {"input": 15,   "output": 75, "cache_write": 18.75, "cache_read": 1.50},
-    "sonnet":    {"input": 3,    "output": 15, "cache_write": 6,     "cache_read": 0.30},
-    "haiku":     {"input": 1,    "output": 5,  "cache_write": 2,     "cache_read": 0.10},
+    "opus_new":  {"input": 5,  "output": 25, "cache_write_5m": 6.25,  "cache_write_1h": 10,    "cache_read": 0.50},
+    "opus_old":  {"input": 15, "output": 75, "cache_write_5m": 18.75, "cache_write_1h": 30,    "cache_read": 1.50},
+    "sonnet":    {"input": 3,  "output": 15, "cache_write_5m": 3.75,  "cache_write_1h": 6,     "cache_read": 0.30},
+    "haiku":     {"input": 1,  "output": 5,  "cache_write_5m": 1.25,  "cache_write_1h": 2,     "cache_read": 0.10},
 }
 MODEL_SHORT = {
     "claude-opus-4-7":"Opus 4.7",
@@ -1065,7 +1078,19 @@ def scan():
                             total_t = i + o + w + r
                             m = msg.get("model", "")
                             p = PRICING.get(tier(m), PRICING["sonnet"])
-                            mc = (i * p["input"] + o * p["output"] + w * p["cache_write"] + r * p["cache_read"]) / 1e6
+                            # Cache write: split by TTL when the nested breakdown is
+                            # available (newer Claude Code JSONLs include
+                            # usage.cache_creation.{ephemeral_5m,ephemeral_1h}_input_tokens).
+                            # Flat cache_creation_input_tokens is assumed 1h as a
+                            # fallback for older logs — Claude Code's actual default.
+                            cc = u.get("cache_creation")
+                            if isinstance(cc, dict):
+                                w5 = cc.get("ephemeral_5m_input_tokens", 0)
+                                w1 = cc.get("ephemeral_1h_input_tokens", 0)
+                                cw_cost = w5 * p["cache_write_5m"] + w1 * p["cache_write_1h"]
+                            else:
+                                cw_cost = w * p["cache_write_1h"]
+                            mc = (i * p["input"] + o * p["output"] + cw_cost + r * p["cache_read"]) / 1e6
                             s["cost"] += mc
                             # v3: session-level tracking
                             sess_cost += mc; sess_msgs += 1
@@ -1234,8 +1259,11 @@ def recalc_remote_cost(data):
         for model, mdata in mb.items():
             ratio = mdata.get("tokens", 0) / sum_tokens
             p = PRICING.get(tier(model), PRICING["sonnet"])
+            # Remote JSON only carries the aggregated cache_write_tokens, so
+            # we can't split 5m vs 1h TTL here. Use 1h as the conservative
+            # default — matches Claude Code's empirical behavior.
             model_cost = (inp * ratio * p["input"] + out * ratio * p["output"] +
-                          cw * ratio * p["cache_write"] + cr * ratio * p["cache_read"]) / 1e6
+                          cw * ratio * p["cache_write_1h"] + cr * ratio * p["cache_read"]) / 1e6
             total += model_cost
             mdata["cost"] = round(model_cost, 2)
     else:
@@ -1244,7 +1272,7 @@ def recalc_remote_cost(data):
         # have tokens=0 (pre-v3 remote data written before per-model
         # token tracking landed).
         p = PRICING["sonnet"]
-        total = (inp * p["input"] + out * p["output"] + cw * p["cache_write"] + cr * p["cache_read"]) / 1e6
+        total = (inp * p["input"] + out * p["output"] + cw * p["cache_write_1h"] + cr * p["cache_read"]) / 1e6
     data["total_cost"] = round(total, 2)
     return data
 
@@ -1317,6 +1345,71 @@ def _build_level_data():
     except Exception:
         return {}
 
+def _merge_machines_data(machines):
+    """Merge today/daily/hourly/models/projects across all machines.
+
+    Prior to v1.4.1, generate_dashboard() aggregated these correctly but
+    main() (menu) displayed only local — so 'Daily Details', 'Hourly
+    Activity' and 'Top Projects' were silently local-only while the top
+    'Cumulative Cost' was fleet-wide. Users with multiple Macs saw
+    inconsistent totals between the menu sections. One merge path, both
+    callers — no more drift.
+
+    Each machine dict must expose (as load_remotes() normalizes):
+      - today: {cost, msgs, tokens, inp, out, cw, cr, models}
+      - daily: {date_str: {cost, msgs, tokens}}
+      - hourly: {hour: int} — hour may be int or str-digit
+      - models: {model_name: {msgs, tokens, cost}}
+      - projects: {name: {cost, msgs, tokens}}
+    """
+    today = {"cost": 0.0, "msgs": 0, "tokens": 0,
+             "inp": 0, "out": 0, "cw": 0, "cr": 0, "models": {}}
+    daily, hourly, models, projects = {}, {}, {}, {}
+
+    for m in machines:
+        # today
+        mt = m.get("today", {}) or {}
+        for k in ("cost", "msgs", "tokens", "inp", "out", "cw", "cr"):
+            today[k] = today.get(k, 0) + mt.get(k, 0)
+        for name, d in (mt.get("models") or {}).items():
+            if name not in today["models"]:
+                today["models"][name] = {"msgs": 0, "cost": 0.0}
+            today["models"][name]["msgs"] += d.get("msgs", 0)
+            today["models"][name]["cost"] += d.get("cost", 0)
+
+        # daily
+        for date, v in (m.get("daily") or {}).items():
+            if date not in daily:
+                daily[date] = {"cost": 0.0, "msgs": 0, "tokens": 0}
+            daily[date]["cost"] += v.get("cost", 0)
+            daily[date]["msgs"] += v.get("msgs", 0)
+            daily[date]["tokens"] += v.get("tokens", 0)
+
+        # hourly (coerce key to int so menu and dashboard use the same space)
+        for h, cnt in (m.get("hourly") or {}).items():
+            try: hi = int(h)
+            except Exception: continue
+            hourly[hi] = hourly.get(hi, 0) + cnt
+
+        # models
+        for name, d in (m.get("models") or {}).items():
+            if name not in models:
+                models[name] = {"msgs": 0, "tokens": 0, "cost": 0.0}
+            models[name]["msgs"] += d.get("msgs", 0)
+            models[name]["tokens"] += d.get("tokens", 0)
+            models[name]["cost"] += d.get("cost", 0)
+
+        # projects
+        for proj, v in (m.get("projects") or {}).items():
+            if proj not in projects:
+                projects[proj] = {"cost": 0.0, "msgs": 0, "tokens": 0}
+            projects[proj]["cost"] += v.get("cost", 0)
+            projects[proj]["msgs"] += v.get("msgs", 0)
+            projects[proj]["tokens"] += v.get("tokens", 0)
+
+    return today, daily, hourly, models, projects
+
+
 def generate_dashboard():
     """Generate a self-contained HTML dashboard and open in browser."""
     local = scan()
@@ -1328,59 +1421,9 @@ def generate_dashboard():
     tc = sum(m.get("cost", 0) for m in machines)
     ts = sum(m.get("sessions", 0) for m in machines)
 
-    # Merge today across all machines — all numeric fields + per-model.
-    # Previously this only merged cost+msgs, dropping tokens/inp/out/cw/cr
-    # from every remote machine. Now that save_sync writes the full today
-    # snapshot (since 1.3.9), aggregate it properly so the today panel
-    # in dashboard/menu reflects fleet totals.
-    today = {"cost": 0.0, "msgs": 0, "tokens": 0,
-             "inp": 0, "out": 0, "cw": 0, "cr": 0, "models": {}}
-    for _m in machines:
-        _mt = _m.get("today", {})
-        for _k in ("cost", "msgs", "tokens", "inp", "out", "cw", "cr"):
-            today[_k] = today.get(_k, 0) + _mt.get(_k, 0)
-        for _model, _d in _mt.get("models", {}).items():
-            if _model not in today["models"]:
-                today["models"][_model] = {"msgs": 0, "cost": 0.0}
-            today["models"][_model]["msgs"] += _d.get("msgs", 0)
-            today["models"][_model]["cost"] += _d.get("cost", 0)
-
-    # Merge daily across all machines
-    daily = {}
-    for m in machines:
-        for date, v in m.get("daily", {}).items():
-            if date not in daily:
-                daily[date] = {"cost": 0.0, "msgs": 0, "tokens": 0}
-            daily[date]["cost"] += v.get("cost", 0)
-            daily[date]["msgs"] += v.get("msgs", 0)
-            daily[date]["tokens"] += v.get("tokens", 0)
-
-    # Merge hourly across all machines
-    hourly = {}
-    for m in machines:
-        for h, cnt in m.get("hourly", {}).items():
-            h_str = str(h)
-            hourly[h_str] = hourly.get(h_str, 0) + cnt
-
-    # Merge models across all machines
-    models = {}
-    for m in machines:
-        for model, data in m.get("models", {}).items():
-            if model not in models:
-                models[model] = {"msgs": 0, "tokens": 0, "cost": 0.0}
-            models[model]["msgs"] += data.get("msgs", 0)
-            models[model]["tokens"] += data.get("tokens", 0)
-            models[model]["cost"] += data.get("cost", 0)
-
-    # Merge projects across all machines
-    projects = {}
-    for m in machines:
-        for proj, v in m.get("projects", {}).items():
-            if proj not in projects:
-                projects[proj] = {"cost": 0.0, "msgs": 0, "tokens": 0}
-            projects[proj]["cost"] += v.get("cost", 0)
-            projects[proj]["msgs"] += v.get("msgs", 0)
-            projects[proj]["tokens"] += v.get("tokens", 0)
+    today, daily, hourly_int, models, projects = _merge_machines_data(machines)
+    # Dashboard's JS expects string-keyed hourly; keep backward-compat.
+    hourly = {str(k): v for k, v in hourly_int.items()}
 
     machine_data = [{"name": m.get("machine", "?"), "cost": round(m.get("cost", 0), 2),
                      "sessions": m.get("sessions", 0)} for m in machines]
@@ -2218,25 +2261,19 @@ def main():
     tw = sum(m["cw"] for m in machines); tr = sum(m["cr"] for m in machines)
     tc = sum(m["cost"] for m in machines); ts = sum(m["sessions"] for m in machines)
     ta = ti + to + tw + tr
-    today = local["today"]
     machine_count = len(machines)
 
-    daily = dict(local["daily"])  # convert from defaultdict
-    # Sort by date
+    # Merge across all machines for the detail panels below (Daily / Hourly /
+    # Projects / Today / Models). Only the '设备 / Machines' panel shows
+    # per-machine data. Prior versions showed Daily/Hourly/Projects as
+    # local-only while the top 'Cumulative Cost' was fleet-wide — users
+    # with 2+ Macs got silently mismatched numbers between sections.
+    today, daily, hourly_agg, all_models, projects_agg = _merge_machines_data([local] + remotes)
+    total_model_msgs = max(sum(v["msgs"] for v in all_models.values()), 1)
+
     daily_sorted = sorted(daily.items(), key=lambda x: x[0])
     # Last 7 days for quick stats (today + 6 preceding days)
     last_7d = [(d, v) for d, v in daily_sorted if d >= (datetime.now() - timedelta(days=6)).strftime("%Y-%m-%d")]
-
-    # Aggregate models across all machines
-    all_models = {}
-    for m in machines:
-        for model, data in m.get("models", {}).items():
-            if model not in all_models:
-                all_models[model] = {"msgs": 0, "tokens": 0, "cost": 0.0}
-            all_models[model]["msgs"] += data["msgs"]
-            all_models[model]["tokens"] += data["tokens"]
-            all_models[model]["cost"] += data["cost"]
-    total_model_msgs = max(sum(v["msgs"] for v in all_models.values()), 1)
 
     # ─── Menu bar line ───
     usage, usage_err = get_usage()
@@ -2554,15 +2591,14 @@ def main():
         pct = data["msgs"] / total_model_msgs * 100
         print(f"--{short:<12} {pct:>3.0f}%   {fc(data['cost']):>8}   {data['msgs']:>6,} msgs | {ROW2}")
 
-    # Hourly Activity
-    hourly_local = local["hourly"]
-    if hourly_local:
+    # Hourly Activity (fleet-wide via _merge_machines_data)
+    if hourly_agg:
         print(f"{t('hours')} | {SH}")
-        total_hourly = max(sum(hourly_local.values()), 1)
-        max_h = max(hourly_local.values()) if hourly_local else 1
+        total_hourly = max(sum(hourly_agg.values()), 1)
+        max_h = max(hourly_agg.values()) if hourly_agg else 1
         sparks = " ▁▂▃▄▅▆▇█"
         def spark(h):
-            v = hourly_local.get(h, 0)
+            v = hourly_agg.get(h, 0)
             if v == 0: return "▁"
             level = min(int(v / max_h * 8) + 1, 8)
             return sparks[level]
@@ -2573,18 +2609,17 @@ def main():
             (t("late"), "00–06", range(0, 6)),
         ]
         for label, time_str, hours_range in block_defs:
-            count = sum(hourly_local.get(h, 0) for h in hours_range)
+            count = sum(hourly_agg.get(h, 0) for h in hours_range)
             if count == 0: continue
             pct = count / total_hourly * 100
             sparkline = "".join(spark(h) for h in hours_range)
             msgs_u = t("msgs")
             print(f"--{label} {time_str}  {sparkline}  {count:>5,} {msgs_u} {pct:>2.0f}% | {ROW2}")
 
-    # Top Projects
-    projects_local = dict(local["projects"])
-    if projects_local:
+    # Top Projects (fleet-wide)
+    if projects_agg:
         print(f"{t('projects')} | {SH}")
-        top = sorted(projects_local.items(), key=lambda x: -x[1]["cost"])[:8]
+        top = sorted(projects_agg.items(), key=lambda x: -x[1]["cost"])[:8]
         for name, data in top:
             short_name = f"{name[:14]:<14}" if len(name) <= 14 else f"{name[:13]}…"
             print(f"--{short_name}  {fc(data['cost']):>8}   {tk(data['tokens']):>8}   {data['msgs']:>5} msgs | {ROW2}")

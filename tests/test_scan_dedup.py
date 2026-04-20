@@ -31,18 +31,21 @@ def load_plugin():
     return mod
 
 
-def make_row(msg_id, model="claude-sonnet-4-5", inp=1000, out=500, cw=0, cr=0, ts="2026-04-15T10:00:00Z"):
+def make_row(msg_id, model="claude-sonnet-4-5", inp=1000, out=500, cw=0, cr=0,
+             cw_5m=None, cw_1h=None, ts="2026-04-15T10:00:00Z"):
+    usage = {
+        "input_tokens": inp, "output_tokens": out,
+        "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr,
+    }
+    if cw_5m is not None or cw_1h is not None:
+        usage["cache_creation"] = {
+            "ephemeral_5m_input_tokens": cw_5m or 0,
+            "ephemeral_1h_input_tokens": cw_1h or 0,
+        }
     return json.dumps({
         "type": "assistant",
         "timestamp": ts,
-        "message": {
-            "id": msg_id,
-            "model": model,
-            "usage": {
-                "input_tokens": inp, "output_tokens": out,
-                "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr,
-            },
-        },
+        "message": {"id": msg_id, "model": model, "usage": usage},
     })
 
 
@@ -132,6 +135,29 @@ class ScanDedupTest(unittest.TestCase):
         total_daily_cost = sum(v["cost"] for v in daily.values())
         self.assertAlmostEqual(total_daily_cost, s["cost"], places=4,
             msg="daily cost must match total cost — both go through the same dedup path")
+
+    def test_cache_ttl_split_prices_5m_and_1h_differently(self):
+        # Sonnet: input=3, cw_5m=3.75, cw_1h=6. 1M tokens of 5m → $3.75,
+        # 1M tokens of 1h → $6. Flat 1h fallback would wrongly price 5m at $6.
+        self._write([
+            make_row("m1", model="claude-sonnet-4-6", inp=0, out=0,
+                     cw=1_000_000, cw_5m=1_000_000, cw_1h=0),
+            make_row("m2", model="claude-sonnet-4-6", inp=0, out=0,
+                     cw=1_000_000, cw_5m=0, cw_1h=1_000_000),
+        ])
+        s = self.mod.scan()
+        # Expected: 3.75 + 6 = 9.75
+        self.assertAlmostEqual(s["cost"], 9.75, places=4,
+            msg=f"5m×$3.75 + 1h×$6 should equal $9.75, got ${s['cost']:.4f}")
+
+    def test_cache_ttl_missing_falls_back_to_1h(self):
+        # Old JSONL without cache_creation nested object: flat cw priced at 1h.
+        self._write([
+            make_row("m1", model="claude-sonnet-4-6", inp=0, out=0, cw=1_000_000),
+        ])
+        s = self.mod.scan()
+        self.assertAlmostEqual(s["cost"], 6.0, places=4,
+            msg=f"flat 1M cw tokens with no TTL split should price at $6 (1h), got ${s['cost']:.4f}")
 
 
 if __name__ == "__main__":
