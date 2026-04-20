@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.3.6"
+VERSION = "1.3.7"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -47,7 +47,7 @@ def load_config():
         except Exception: pass
     if cfg["language"] == "auto":
         try:
-            out = subprocess.check_output(["defaults","read",".GlobalPreferences","AppleLanguages"], stderr=subprocess.DEVNULL, text=True)
+            out = subprocess.check_output(["defaults","read",".GlobalPreferences","AppleLanguages"], stderr=subprocess.DEVNULL, text=True, timeout=3)
             langs = [l.strip().strip('"').strip('",') for l in out.split("\n") if l.strip() and l.strip() not in ("(", ")")]
             if langs:
                 fl = langs[0].lower().split("-")[0]  # "en-CN" → "en", "zh-Hans-CN" → "zh"
@@ -398,11 +398,18 @@ def bar(val, maxval, width=12):
 # ─── Notifications ───────────────────────────────────────────────
 
 def _notify(title, msg):
-    """Send a macOS notification."""
+    """Send a macOS notification.
+    json.dumps(..., ensure_ascii=False) produces a legal AppleScript string
+    literal: double quotes / backslashes escaped, UTF-8 chars stay literal.
+    This guards against any title/msg that happens to contain a '"' — without
+    it, osascript would syntax-error and the notification would be dropped.
+    (Same technique used for the force-update body at __main__.)"""
     try:
+        t_lit = json.dumps(title, ensure_ascii=False)
+        m_lit = json.dumps(msg, ensure_ascii=False)
         subprocess.run([
             "osascript", "-e",
-            f'display notification "{msg}" with title "{title}" subtitle "cc-token-status"'
+            f'display notification {m_lit} with title {t_lit} subtitle "cc-token-status"'
         ], timeout=5)
     except Exception: pass
 
@@ -476,18 +483,14 @@ def check_and_notify(usage):
     # For non-burn keys: only remove if the reset time in the key is in the past
     for k in list(state.keys()):
         if k in current_keys: continue
-        # Extract reset timestamp from key (last 16 chars after last _)
+        # Extract reset timestamp from key (last 16 chars after last _).
+        # Works uniformly for both threshold keys ('five_hour_80_<iso>') and
+        # burn keys ('burn_<iso>') because the iso suffix is always after
+        # the final '_'. The previous explicit burn_ branch was dead code.
         parts = k.rsplit("_", 1)
-        if len(parts) == 2 and len(parts[1]) >= 16:
-            if parts[1] < now_str:
-                del state[k]
-                changed = True
-        elif k.startswith("burn_") and k not in current_keys:
-            # Burn key from past cycle
-            burn_reset = k[5:]  # "burn_2026-04-11T06:00"
-            if burn_reset < now_str:
-                del state[k]
-                changed = True
+        if len(parts) == 2 and len(parts[1]) >= 16 and parts[1] < now_str:
+            del state[k]
+            changed = True
 
     if changed:
         try:
@@ -846,13 +849,21 @@ def get_usage():
 
     # On 429: backoff (10m → 20m → 40m → 60m cap), respect Retry-After
     if err and err.startswith("rate_limit"):
-        new_count = backoff_count + 1
         retry_after_secs = None
         if ":" in err:
             try: retry_after_secs = int(err.split(":")[1])
             except (ValueError, IndexError): pass
-        delay = min(retry_after_secs, 3600) if retry_after_secs and retry_after_secs > 0 \
-            else min(600 * (2 ** (new_count - 1)), 3600)
+        if retry_after_secs and retry_after_secs > 0:
+            # Server gave an explicit Retry-After — honor it without
+            # incrementing the exponential-backoff counter. Previously
+            # count grew on every 429 even when the server asked for a
+            # small specific delay, so the NEXT 429 without Retry-After
+            # would skip straight to a large 2^N fallback.
+            delay = min(retry_after_secs, 3600)
+            new_count = backoff_count
+        else:
+            new_count = backoff_count + 1
+            delay = min(600 * (2 ** (new_count - 1)), 3600)
         _save_backoff(now_ts + delay, new_count)
         return _best_cached(now_ts), None  # silent fallback
 
@@ -864,13 +875,12 @@ def get_usage():
 
 def _best_cached(now_ts):
     """Return best available cached data (local or synced), up to 2h stale."""
-    for source in [USAGE_CACHE]:
-        try:
-            if source.is_file():
-                data = json.loads(source.read_text())
-                if now_ts - data.get("_ts", 0) < 7200:
-                    return data
-        except Exception: pass
+    try:
+        if USAGE_CACHE.is_file():
+            data = json.loads(USAGE_CACHE.read_text())
+            if now_ts - data.get("_ts", 0) < 7200:
+                return data
+    except Exception: pass
     synced = _read_synced_usage()
     if synced and now_ts - synced.get("_ts", 0) < 7200:
         return synced
@@ -1085,7 +1095,7 @@ def scan():
                     if sess_first_date:
                         s["daily"][sess_first_date]["sessions"] = s["daily"][sess_first_date].get("sessions", 0) + 1
                         sess_list = s["sessions_by_day"][sess_first_date]
-                        if len(sess_list) < 30:  # cap per day
+                        if len(sess_list) < 30:  # cap per day — prevents dashboard 'sessions today' table from blowing up on heavy usage days; surplus sessions still count in tokens/cost totals
                             dom_model = max(sess_model_counts, key=sess_model_counts.get) if sess_model_counts else ""
                             short_dm = MODEL_SHORT.get(dom_model, dom_model.split("-")[-1] if "-" in dom_model else dom_model[:15])
                             sess_list.append({"project": proj_name, "cost": round(sess_cost, 2),
