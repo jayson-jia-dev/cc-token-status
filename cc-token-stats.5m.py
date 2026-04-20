@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.3.4"
+VERSION = "1.3.5"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -846,12 +846,18 @@ def _file_fingerprints(base):
             except Exception: pass
     return fps
 
+SCAN_CACHE_SCHEMA = "local-tz-v1"  # bump when scan-result semantics change
+
 def _load_scan_cache(base, today_str):
-    """Return cached scan result if all files unchanged and same day."""
+    """Return cached scan result if all files unchanged and same day.
+    Rejects cache from older schemas so a change in date-bucketing semantics
+    (e.g. the UTC→local switch in local-tz-v1) doesn't mix with new data."""
     try:
         if not SCAN_CACHE_FILE.is_file():
             return None
         cache = json.loads(SCAN_CACHE_FILE.read_text())
+        if cache.get("schema") != SCAN_CACHE_SCHEMA:
+            return None  # schema bumped → old cache discarded, force a fresh re-scan once
         if cache.get("date") != today_str:
             return None  # day boundary crossed, need re-scan for today stats
         current_fps = _file_fingerprints(base)
@@ -873,6 +879,7 @@ def _save_scan_cache(base, today_str, s):
     """Save scan result and file fingerprints to cache."""
     try:
         cache = {
+            "schema": SCAN_CACHE_SCHEMA,
             "date": today_str,
             "file_mtimes": _file_fingerprints(base),
             "result": {k: (dict(v) if isinstance(v, defaultdict) else v) for k, v in s.items()},
@@ -958,9 +965,26 @@ def scan():
                                 if m not in s["models"]: s["models"][m] = {"msgs": 0, "tokens": 0, "cost": 0.0}
                                 s["models"][m]["msgs"] += 1; s["models"][m]["tokens"] += total_t; s["models"][m]["cost"] += mc
 
-                            # Per-message date
+                            # Per-message timestamp → parse once, derive local
+                            # date / hour / weekday + naive-local dt for rolling
+                            # windows. PREVIOUSLY msg_date = ts_str[:10] took the
+                            # UTC date out of the JSONL's Zulu timestamp, but
+                            # today_str / cutoff_5h / cutoff_7d are all LOCAL —
+                            # so UTC+N users had their midnight-to-(N)AM messages
+                            # misfiled to yesterday's daily bucket and missed
+                            # entirely from 'today'. All downstream values now
+                            # come from the same astimezone()-converted dt.
                             ts_str = d.get("timestamp", "")
-                            msg_date = ts_str[:10] if ts_str and len(ts_str) >= 10 else None
+                            msg_date = None
+                            local_dt = None
+                            msg_dt_naive = None
+                            if ts_str:
+                                try:
+                                    local_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone()
+                                    msg_date = local_dt.strftime("%Y-%m-%d")
+                                    msg_dt_naive = local_dt.replace(tzinfo=None)
+                                except Exception:
+                                    pass
 
                             # Today
                             if msg_date == today_str:
@@ -987,29 +1011,23 @@ def scan():
                                     dm = s["daily_models"][msg_date][short_m]
                                     dm["cost"] += mc; dm["msgs"] += 1
 
-                            # Hourly (convert to local timezone)
-                            if ts_str:
-                                try:
-                                    local_dt = datetime.fromisoformat(ts_str.replace("Z","+00:00")).astimezone()
-                                    local_h = local_dt.hour
-                                    s["hourly"][local_h] += 1
-                                    # v3: per-day per-hour for heatmap
-                                    if msg_date:
-                                        local_weekday = local_dt.weekday()  # 0=Mon, 6=Sun
-                                        s["daily_hourly"][local_weekday][local_h] += 1
-                                except Exception: pass
+                            # Hourly (already local from the single parse above)
+                            if local_dt is not None:
+                                local_h = local_dt.hour
+                                s["hourly"][local_h] += 1
+                                # v3: per-day per-hour for heatmap
+                                if msg_date:
+                                    local_weekday = local_dt.weekday()  # 0=Mon, 6=Sun
+                                    s["daily_hourly"][local_weekday][local_h] += 1
 
-                            # Rolling windows (5h / 7d)
-                            if ts_str:
-                                try:
-                                    msg_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone().replace(tzinfo=None)
-                                    if msg_dt >= cutoff_5h:
-                                        s["window_5h"]["tokens"] += total_t; s["window_5h"]["cost"] += mc
-                                        s["window_5h"]["msgs"] += 1; s["window_5h"]["out"] += o
-                                    if msg_dt >= cutoff_7d:
-                                        s["window_7d"]["tokens"] += total_t; s["window_7d"]["cost"] += mc
-                                        s["window_7d"]["msgs"] += 1; s["window_7d"]["out"] += o
-                                except Exception: pass
+                            # Rolling windows (5h / 7d) — cutoffs are naive-local
+                            if msg_dt_naive is not None:
+                                if msg_dt_naive >= cutoff_5h:
+                                    s["window_5h"]["tokens"] += total_t; s["window_5h"]["cost"] += mc
+                                    s["window_5h"]["msgs"] += 1; s["window_5h"]["out"] += o
+                                if msg_dt_naive >= cutoff_7d:
+                                    s["window_7d"]["tokens"] += total_t; s["window_7d"]["cost"] += mc
+                                    s["window_7d"]["msgs"] += 1; s["window_7d"]["out"] += o
 
                             # Project
                             s["projects"][proj_name]["tokens"] += total_t
