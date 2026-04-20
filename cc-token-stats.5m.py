@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.4.4"
+VERSION = "1.4.5"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -449,51 +449,86 @@ def _notify(title, msg):
     except Exception: pass
 
 def check_and_notify(usage):
-    """Send macOS notification when limits cross 80% or 95%. Once per threshold per reset cycle."""
+    """Send macOS notification on rate-limit escalation — one per tier jump.
+
+    Previous design spammed the user. It fired every crossed threshold
+    (80 + 95 + 100 all in the same check when util jumped 0→100) AND
+    re-fired the entire set every time the API's reset_at rolled over,
+    so a user who stayed heavy across a 5h window boundary got 4 pushes
+    per rollover (see user-reported 4× at 18:52 + 4× at 19:02).
+
+    New semantics — one state entry per limit, tracking the highest
+    tier we've already notified for:
+      state = {limit_key: {"tier": 80|95|100, "at": ISO}}
+
+    - Fire only when current tier > last notified tier (escalation).
+      Jump 0→100% fires ONE notification at tier=100, not three.
+    - Window rollover does not re-fire — tier-key has no reset stamp,
+      state survives the rollover. If util stays high after reset, the
+      user already knows.
+    - User drops below 80% → entry cleared; next crossing fires again.
+    - Burn rate only fires when not-yet-100% (redundant once blocked).
+    """
     if not CFG.get("notifications", True) or not usage:
         return
-    # Load state
     state = {}
     try:
         if NOTIFY_STATE_FILE.is_file():
-            state = json.loads(NOTIFY_STATE_FILE.read_text())
+            raw = json.loads(NOTIFY_STATE_FILE.read_text())
+            # Drop legacy format (string values keyed by '..._80_<reset>')
+            # so pre-v1.4.5 state doesn't keep old keys around forever.
+            state = {k: v for k, v in raw.items() if isinstance(v, dict) and "tier" in v}
     except Exception: pass
 
-    # Three-tier alerting — previously 100% shared the "imminent!" copy with
-    # 95%, which reads wrong when the user is actually already blocked.
-    thresholds = [80, 95, 100]
+    thresholds = [100, 95, 80]  # highest-first so we pick top crossed tier
     checks = [
         ("Session", "five_hour"),
         ("Weekly", "seven_day"),
         ("Sonnet", "seven_day_sonnet"),
         ("Opus", "seven_day_opus"),
     ]
-    current_keys = set()
     changed = False
-    for name, key in checks:
-        obj = usage.get(key)
+    five_hour_tier = 0  # remembered for the burn-rate redundancy check
+
+    for name, limit_key in checks:
+        obj = usage.get(limit_key)
         if not obj or obj.get("utilization") is None: continue
         util = obj["utilization"]
-        # Truncate reset time to minute — avoid microsecond differences creating duplicate keys
-        reset_raw = obj.get("resets_at", "")
-        reset = reset_raw[:16] if reset_raw else ""  # "2026-04-11T06:00"
+        # Current tier = highest threshold crossed (0 if none)
+        cur_tier = 0
         for thresh in thresholds:
-            state_key = f"{key}_{thresh}_{reset}"
-            current_keys.add(state_key)
-            if util >= thresh and state_key not in state:
-                if thresh >= 100:
-                    # Already blocked — different icon + "limit reached" copy
-                    _notify(f"🛑 {name} {util:.0f}%", t("limit_blocked"))
-                elif thresh >= 95:
-                    _notify(f"⛔ {name} {util:.0f}%", t("limit_crit"))
-                else:
-                    _notify(f"⚠️ {name} {util:.0f}%", t("limit_warn"))
-                state[state_key] = datetime.now().isoformat()
-                changed = True
+            if util >= thresh:
+                cur_tier = thresh
+                break
 
-    # Burn rate warning: if session >50% and will hit 100% within 30 min at current pace
+        if limit_key == "five_hour":
+            five_hour_tier = cur_tier
+
+        entry = state.get(limit_key) or {}
+        last_tier = entry.get("tier", 0) if isinstance(entry, dict) else 0
+
+        if cur_tier > last_tier:
+            # Escalation — user is worse off than when we last notified.
+            if cur_tier >= 100:
+                _notify(f"🛑 {name} {util:.0f}%", t("limit_blocked"))
+            elif cur_tier >= 95:
+                _notify(f"⛔ {name} {util:.0f}%", t("limit_crit"))
+            else:  # 80
+                _notify(f"⚠️ {name} {util:.0f}%", t("limit_warn"))
+            state[limit_key] = {"tier": cur_tier, "at": datetime.now().isoformat()}
+            changed = True
+        elif cur_tier == 0 and last_tier > 0:
+            # User dropped out of the alert zone; clear so re-crossing fires.
+            state.pop(limit_key, None)
+            changed = True
+        # Else: same tier, or de-escalated within alert zone — no notification.
+
+    # Burn rate: only useful before user is actually blocked. If five_hour
+    # already hit 100% tier, burn notification is noise.
+    burn_key = "_burn_five_hour"
     fh = usage.get("five_hour")
-    if fh and fh.get("utilization") is not None and fh["utilization"] >= 50:
+    burned = False
+    if fh and fh.get("utilization") is not None and fh["utilization"] >= 50 and five_hour_tier < 100:
         try:
             reset_str = fh.get("resets_at", "")
             if reset_str:
@@ -501,36 +536,33 @@ def check_and_notify(usage):
                 now_aware = datetime.now().astimezone()
                 remaining_min = (rt - now_aware).total_seconds() / 60
                 util = fh["utilization"]
+                # Sanity-clamp remaining_min to [0, 300]. API should never
+                # return a reset_at more than 5h (300min) ahead for five_hour;
+                # if it does, the window is in an inconsistent state and the
+                # burn-rate math below produces garbage (elapsed clamps to 1,
+                # rate becomes util% per minute → false-positive burn notif).
+                remaining_min = max(0.0, min(300.0, remaining_min))
                 # Estimate time to 100%: if util% used in (300-remaining) minutes,
                 # rate = util / elapsed, time_to_100 = (100-util) / rate
-                elapsed_min = max(300 - remaining_min, 1)  # 5h = 300min
-                rate = util / elapsed_min  # % per minute
+                elapsed_min = max(300 - remaining_min, 1)
+                rate = util / elapsed_min
                 if rate > 0:
                     min_to_full = (100 - util) / rate
-                    burn_key = f"burn_{reset_str[:16]}"
                     if min_to_full <= 30 and burn_key not in state:
                         _notify(
                             f"🔥 Session {util:.0f}%",
                             t("burn_rate").format(int(min_to_full))
                         )
-                        state[burn_key] = datetime.now().isoformat()
+                        state[burn_key] = {"tier": -1, "at": datetime.now().isoformat()}
                         changed = True
-                    current_keys.add(burn_key)
+                        burned = True
         except Exception: pass
 
-    # Cleanup: remove entries whose reset time has passed (not just missing from current check)
-    now_str = datetime.now().strftime("%Y-%m-%dT%H:%M")
-    # For non-burn keys: only remove if the reset time in the key is in the past
-    for k in list(state.keys()):
-        if k in current_keys: continue
-        # Extract reset timestamp from key (last 16 chars after last _).
-        # Works uniformly for both threshold keys ('five_hour_80_<iso>') and
-        # burn keys ('burn_<iso>') because the iso suffix is always after
-        # the final '_'. The previous explicit burn_ branch was dead code.
-        parts = k.rsplit("_", 1)
-        if len(parts) == 2 and len(parts[1]) >= 16 and parts[1] < now_str:
-            del state[k]
-            changed = True
+    # Clear burn-state when condition no longer holds, so next dangerous
+    # trajectory can re-fire (e.g. user cooled down then ramped again).
+    if not burned and five_hour_tier == 0 and burn_key in state:
+        state.pop(burn_key, None)
+        changed = True
 
     if changed:
         try:

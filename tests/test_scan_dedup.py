@@ -266,5 +266,101 @@ class UserLevelDedupTest(unittest.TestCase):
             msg=f"dedup'd 5-msg session should score usage ≤4, got {details['usage']}")
 
 
+class NotifyDedupTest(unittest.TestCase):
+    """Regression for v1.4.5 notification spam fix.
+
+    Before: jumping 0→100% util in one cycle fired 80/95/100/burn = 4
+    pushes; each 5h window rollover re-fired the whole set. The user
+    showed a screenshot of 8 pushes in 10 min. New semantics must
+    guarantee: one notification per limit per escalation.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="cc-notify-test-")
+        self.mod = load_plugin()
+        self.mod.NOTIFY_STATE_FILE = Path(self.tmp) / "notify.json"
+        # CFG defaults notifications=True via CFG.get default, fine.
+        self.mod.CFG = {"notifications": True}
+        # Intercept _notify so we can assert count without invoking osascript
+        self.pushes = []
+        self.mod._notify = lambda title, msg: self.pushes.append((title, msg))
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _usage(self, util, reset=None):
+        # Default reset: 2 hours in the future so burn-rate math is well-defined
+        # (within the 5h window constraint).
+        if reset is None:
+            from datetime import datetime, timedelta
+            reset = (datetime.now().astimezone() + timedelta(hours=2)).isoformat()
+        return {"five_hour": {"utilization": util, "resets_at": reset}}
+
+    def test_jump_zero_to_100_fires_once(self):
+        self.mod.check_and_notify(self._usage(100))
+        self.assertEqual(len(self.pushes), 1, f"expected 1 push, got {len(self.pushes)}: {self.pushes}")
+        self.assertIn("🛑", self.pushes[0][0])
+
+    def test_repeat_at_same_level_no_refire(self):
+        self.mod.check_and_notify(self._usage(100))
+        self.mod.check_and_notify(self._usage(100))
+        self.mod.check_and_notify(self._usage(100))
+        self.assertEqual(len(self.pushes), 1, "same-level checks must not re-fire")
+
+    def test_window_rollover_no_refire(self):
+        # Window A: util 100, resets 19:00. Fires once.
+        self.mod.check_and_notify(self._usage(100, reset="2026-04-20T19:00Z"))
+        # Window B opens (new reset time). Util still 100% (heavy user).
+        # Under old logic: fires again. Under fix: no fire (user already knows).
+        self.mod.check_and_notify(self._usage(100, reset="2026-04-21T00:00Z"))
+        self.assertEqual(len(self.pushes), 1,
+            f"rollover should not re-fire, got {len(self.pushes)}")
+
+    def test_drop_and_recross_fires_again(self):
+        self.mod.check_and_notify(self._usage(100))
+        self.assertEqual(len(self.pushes), 1)
+        # Util drops to 0 (new session starts or reset cleared quota)
+        self.mod.check_and_notify(self._usage(0))
+        # Now ramps to 100 again — SHOULD re-fire
+        self.mod.check_and_notify(self._usage(100))
+        self.assertEqual(len(self.pushes), 2,
+            "crossing again after dropping below 80 should re-fire")
+
+    def test_escalation_through_tiers(self):
+        # User ramps 75 → 85 → 96 → 100 across four checks. Expected:
+        # one notification per tier crossing PLUS optionally one burn
+        # notification if the ramp is steep enough to predict <30min to full.
+        # 75% is below all tiers (no tier notif, burn math isn't critical yet).
+        # 85% crosses 80 → 1 tier notif. 96% crosses 95 → 1 tier notif AND
+        # burn fires (util=96% with 2h remaining makes min_to_full ~7min).
+        # 100% crosses 100 → 1 tier notif (burn suppressed at ≥100 tier).
+        # Total: 4 notifications — distinct escalation events, not spam.
+        self.mod.check_and_notify(self._usage(75))
+        self.mod.check_and_notify(self._usage(85))
+        self.mod.check_and_notify(self._usage(96))
+        self.mod.check_and_notify(self._usage(100))
+        # Each tier crossing produces exactly ONE tier notif (no 80+95+100
+        # firing at once). Kind matters more than count here.
+        tier_pushes = [p for p in self.pushes if p[0].startswith(("⚠️", "⛔", "🛑"))]
+        self.assertEqual(len(tier_pushes), 3,
+            f"expected exactly 3 tier notifs (80/95/100), got {len(tier_pushes)}: {[p[0] for p in tier_pushes]}")
+        # Burn is optional (may or may not fire depending on ramp). What MUST
+        # hold: total notifications ≤ 4 (no 80/95/100 dup-firing).
+        self.assertLessEqual(len(self.pushes), 4,
+            f"too many notifications — looks like tier dup-firing: {[p[0] for p in self.pushes]}")
+
+    def test_burn_suppressed_when_already_blocked(self):
+        # Contrive a burn-rate scenario: 90% util, reset 5min away → well
+        # under 30min to full. But simultaneously hit 100% → burn should
+        # be skipped because limit_blocked already fires.
+        from datetime import datetime, timedelta, timezone
+        reset = (datetime.now().astimezone() + timedelta(minutes=5)).isoformat()
+        self.mod.check_and_notify({"five_hour": {"utilization": 100, "resets_at": reset}})
+        # Exactly 1 notification (limit_blocked) — not 2 (blocked + burn)
+        self.assertEqual(len(self.pushes), 1, f"burn must not fire at 100%, got {self.pushes}")
+        self.assertIn("🛑", self.pushes[0][0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
