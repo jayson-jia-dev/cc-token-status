@@ -557,8 +557,16 @@ def auto_update():
                 "SwiftBar", "plugins", "cc-token-stats.5m.py")
 
         # 3) Write + fsync + re-read to verify the bytes landed intact on disk.
+        #    tmp name is hidden + lacks the SwiftBar refresh pattern ('.5m.'),
+        #    so SwiftBar won't load it as a plugin, and cleanup_duplicate_plugins()
+        #    (which matches 'cc-token-stats.5m.py.*') won't race-delete it. PID
+        #    suffix keeps concurrent auto_update/force-update runs from stomping
+        #    each other's tmp.
         data = head_bytes
-        tmp_path = plugin_path + ".tmp"
+        tmp_path = os.path.join(
+            os.path.dirname(plugin_path),
+            f".cc-token-stats.download.{os.getpid()}"
+        )
         try:
             with open(tmp_path, "wb") as f:
                 f.write(data)

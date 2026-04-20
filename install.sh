@@ -71,10 +71,17 @@ for old in "$PLUGIN_DIR"/ccpeek* "$PLUGIN_DIR"/cc-pulse*; do
     [ -f "$old" ] && rm -f "$old" && echo "✓ Removed: $(basename "$old")"
 done
 
-# ─── 5. Download plugin ───
+# ─── 5. Download plugin (atomic: tmp + mv) ───
+# Non-atomic 'curl -o target' leaves a half-written file on network failure,
+# which SwiftBar will still try to execute (→ visible Python syntax errors
+# in the menu bar). Download to a hidden tmp in the same dir, then rename.
+# The tmp name lacks the '.5m.' refresh pattern so SwiftBar ignores it.
 echo "Downloading latest plugin..."
-curl -fsSL "${REPO}/${PLUGIN_NAME}?v=${VERSION}" -o "$PLUGIN_DIR/$PLUGIN_NAME"
-chmod +x "$PLUGIN_DIR/$PLUGIN_NAME"
+TMP_PLUGIN="$PLUGIN_DIR/.cc-token-stats.download.$$"
+trap 'rm -f "$TMP_PLUGIN"' EXIT
+curl -fsSL "${REPO}/${PLUGIN_NAME}?v=${VERSION}" -o "$TMP_PLUGIN"
+chmod +x "$TMP_PLUGIN"
+mv "$TMP_PLUGIN" "$PLUGIN_DIR/$PLUGIN_NAME"
 echo "✓ Plugin installed"
 
 # ─── 6. Create config (skip in update mode or if exists) ───
