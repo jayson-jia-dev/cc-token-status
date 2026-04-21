@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.3"
+VERSION = "1.5.4"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -2166,9 +2166,12 @@ html+='<div style="background:#1c2128;border:1px solid #30363d;border-radius:10p
 html+='<div style="font-size:24px">'+b[1]+'</div>';
 html+='<div style="font-size:10px;color:#58d4ab;margin-top:2px;font-weight:600">'+(zh?b[2]:b[3])+'</div></div>';});
 locked.forEach(function(b){
-html+='<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:10px 14px;text-align:center;min-width:90px;opacity:0.35">';
-html+='<div style="font-size:24px;filter:grayscale(1)">'+b[1]+'</div>';
-html+='<div style="font-size:10px;color:#484f58;margin-top:2px">'+(zh?b[2]:b[3])+'</div></div>';});
+// container stays at full opacity so the label text keeps enough contrast
+// to be legible; the 'not yet unlocked' feel comes from the grayscale/half-
+// opacity icon + dimmer label color instead of fading the whole card
+html+='<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:10px 14px;text-align:center;min-width:90px">';
+html+='<div style="font-size:24px;filter:grayscale(1);opacity:0.5">'+b[1]+'</div>';
+html+='<div style="font-size:10px;color:#8b949e;margin-top:2px">'+(zh?b[2]:b[3])+'</div></div>';});
 html+='</div>';
 $('badgesPanel').insertAdjacentHTML('beforeend',html);
 })();
