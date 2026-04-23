@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.8"
+VERSION = "1.5.9"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -140,6 +140,8 @@ STRINGS = {
     "trend_vs":    {"en":"vs 30d avg","zh":"对比 30 天均值","es":"vs prom. 30d","fr":"vs moy. 30j","ja":"30日平均比"},
     "extra":       {"en":"Extra","zh":"额外用量","es":"Extra","fr":"Extra","ja":"追加"},
     "check_update_now": {"en":"Manual Update","zh":"手动更新","es":"Actualización manual","fr":"Mise à jour manuelle","ja":"手動更新"},
+    "force_refresh":      {"en":"Force Refresh Usage","zh":"强制刷新用量","es":"Forzar actualización","fr":"Forcer l'actualisation","ja":"使用量を強制更新"},
+    "force_refresh_wait": {"en":"Force Refresh (wait {0})","zh":"强制刷新 (待 {0})","es":"Forzar ({0})","fr":"Forcer ({0})","ja":"強制更新 (待 {0})"},
 }
 
 def t(key):
@@ -2440,6 +2442,9 @@ PYEOF
   force-update)
     python3 {esc_plugin_bash} --force-update
     ;;
+  force-usage)
+    python3 {esc_plugin_bash} --force-usage
+    ;;
 esac
 """)
         os.chmod(HELPER_FILE, 0o755)
@@ -3019,6 +3024,33 @@ def main():
     check_now_label = t("check_update_now")
     print(f"--{check_now_label} | bash={helper} param1=force-update terminal=false refresh=true")
 
+    # Force refresh usage — manual OAuth fetch, rate-limited by cache _ts (5m cooldown).
+    # Backoff state takes precedence so a server-side 429 isn't overridden from the UI.
+    _force_cd = 300
+    _now = datetime.now().timestamp()
+    _backoff_until, _ = _load_backoff()
+    _cache_age = 99999.0
+    if USAGE_CACHE.is_file():
+        try:
+            _cache_age = _now - json.loads(USAGE_CACHE.read_text()).get("_ts", 0)
+        except (OSError, json.JSONDecodeError, AttributeError): pass
+    def _fmt_wait(secs):
+        # Minute-granularity only. SwiftBar menus are static snapshots — a
+        # seconds counter would falsely imply a live tick. Ceiling avoids
+        # the off-by-one where 0m59s shows as "0m" and feels broken.
+        s = max(1, int(secs))
+        mins = (s + 59) // 60
+        return f"<1m" if s < 60 else f"{mins}m"
+    if _backoff_until > _now:
+        # Server-side cooldown — non-interactive (no bash=, no refresh=),
+        # just a muted info row. SwiftBar's own 5m tick will transition it
+        # back to the active state roughly in sync with our 5m cooldown.
+        print(f"--{t('force_refresh_wait').format(_fmt_wait(_backoff_until - _now))} | color=#9E9589")
+    elif _cache_age < _force_cd:
+        print(f"--{t('force_refresh_wait').format(_fmt_wait(_force_cd - _cache_age))} | color=#9E9589")
+    else:
+        print(f"--{t('force_refresh')} | bash={helper} param1=force-usage terminal=false refresh=true")
+
     # Subscription plan selector
     cur_sub = CFG.get("subscription", 0)
     plans = [("Pro", 20), ("Max 5x", 100), ("Max 20x", 200), ("Team", 30), ("API / None", 0)]
@@ -3030,9 +3062,10 @@ def main():
         label_short = name.split(" ")[0] if " " in name else name
         print(f"----{check}{name} (${price}/mo) | bash={helper} param1=sub param2={price} param3={label_short} terminal=false refresh=true")
 
-    # Refresh and Quit — same level as settings, below separator
+    # Quit — same level as settings, below separator. Top-level Refresh
+    # removed in v1.5.9: Settings → Force Refresh Usage now doubles as a
+    # manual menu redraw (its cooldown variant carries refresh=true).
     print("---")
-    print(f"{t('refresh')} | refresh=true")
     quit_label = t("quit")
     print(f"{quit_label} | bash='osascript' param1='-e' param2='quit app \"SwiftBar\"' terminal=false")
 
@@ -3072,6 +3105,33 @@ if __name__ == "__main__":
                         f'with title "cc-token-status" subtitle "Update check"'
                     ], timeout=5)
         except (OSError, subprocess.SubprocessError): pass
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1] == "--force-usage":
+        # Manual usage refresh. Cooldown = 300s, keyed off the existing
+        # USAGE_CACHE _ts so we don't add a new state file. Menu state
+        # already filters this, but re-check here in case the user bypassed
+        # the menu (e.g. invoked via shell) or the menu snapshot was stale.
+        now_ts = datetime.now().timestamp()
+        backoff_until, _ = _load_backoff()
+        if backoff_until > now_ts:
+            sys.exit(0)
+        if USAGE_CACHE.is_file():
+            try:
+                age = now_ts - json.loads(USAGE_CACHE.read_text()).get("_ts", 0)
+                if age < 300:
+                    sys.exit(0)
+            except (OSError, json.JSONDecodeError, AttributeError): pass
+        # Drop cache to guarantee Layer 1 miss, then fetch. On error we just
+        # exit silently — the existing backoff machinery will take over on
+        # the next 5m tick. No success notification (user preference).
+        try: USAGE_CACHE.unlink(missing_ok=True)
+        except OSError: pass
+        data, err = fetch_usage()
+        if data:
+            data["_ts"] = now_ts
+            _atomic_write_json(USAGE_CACHE, data, mode=0o600)
+            _write_synced_usage(data)
+            _clear_backoff()
         sys.exit(0)
     try:
         main()
