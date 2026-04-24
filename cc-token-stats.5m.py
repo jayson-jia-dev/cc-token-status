@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.11"
+VERSION = "1.5.12"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -141,7 +141,7 @@ STRINGS = {
     "extra":       {"en":"Extra","zh":"额外用量","es":"Extra","fr":"Extra","ja":"追加"},
     "check_update_now": {"en":"Manual Update","zh":"手动更新","es":"Actualización manual","fr":"Mise à jour manuelle","ja":"手動更新"},
     "force_refresh":      {"en":"Force Refresh Usage","zh":"强制刷新用量","es":"Forzar actualización","fr":"Forcer l'actualisation","ja":"使用量を強制更新"},
-    "force_refresh_wait": {"en":"Force Refresh (wait {0})","zh":"强制刷新 (待 {0})","es":"Forzar ({0})","fr":"Forcer ({0})","ja":"強制更新 (待 {0})"},
+    "force_refresh_wait": {"en":"Force Refresh (wait {0})","zh":"强制刷新（冷却中 {0}）","es":"Forzar ({0})","fr":"Forcer ({0})","ja":"強制更新 (待 {0})"},
 }
 
 def t(key):
