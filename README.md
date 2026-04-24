@@ -83,12 +83,12 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 Multi-dimension scoring based on your Claude Code usage maturity:
 
 ```
-🌑 Lv.1  Starter      入门
-🌒 Lv.2  Planner      初级工程师
-🌓 Lv.3  Engineer     中级工程师
-🌔 Lv.4  Integrator   高级工程师
-🌕 Lv.5  Architect    架构师
-👑 Lv.6  Orchestrator 首席架构师
+🌑 Lv.1  Starter      练气期
+🌒 Lv.2  Planner      筑基期
+🌓 Lv.3  Engineer     金丹期
+🌔 Lv.4  Integrator   元婴期
+🌕 Lv.5  Architect    化神期
+👑 Lv.6  Orchestrator 大乘期
 ```
 
 Scored across 5 dimensions (100 points total):
@@ -161,6 +161,14 @@ Three paths, same SHA256 verification and atomic replace:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main/install.sh | bash -s -- --update
    ```
+
+### Stuck on an old version?
+
+The dropdown title shows your current version (e.g. `v1.5.11`). If auto-update has silently failed for 3+ days, a `⚠️` appears in the title and you'll get a one-shot macOS notification. To force-repair from any state:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main/install.sh | bash
+```
 
 Update diagnostics live at `~/.config/cc-token-stats/.update.log` (rotated at 50 KB).
 

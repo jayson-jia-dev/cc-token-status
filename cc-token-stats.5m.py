@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.10"
+VERSION = "1.5.11"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -230,12 +230,12 @@ def tier(m):
 # ─── User Level System ────────────────────────────────────────────
 
 LEVELS = [
-    (0,  "🌑", "Starter",      "入门"),
-    (13, "🌒", "Planner",      "初级工程师"),
-    (31, "🌓", "Engineer",     "中级工程师"),
-    (51, "🌔", "Integrator",   "高级工程师"),
-    (71, "🌕", "Architect",    "架构师"),
-    (86, "👑", "Orchestrator", "首席架构师"),
+    (0,  "🌑", "Starter",      "练气期"),
+    (13, "🌒", "Planner",      "筑基期"),
+    (31, "🌓", "Engineer",     "金丹期"),
+    (51, "🌔", "Integrator",   "元婴期"),
+    (71, "🌕", "Architect",    "化神期"),
+    (86, "👑", "Orchestrator", "大乘期"),
 ]
 
 LEVEL_CACHE_FILE = Path.home() / ".config" / "cc-token-stats" / ".level_cache.json"
@@ -603,9 +603,10 @@ def check_and_notify(usage):
 
 # ─── Auto-update (once per day, silent) ──────────────────────────
 
-UPDATE_CHECK_FILE = Path.home() / ".config" / "cc-token-stats" / ".last_update_check"
-UPDATE_LOG_FILE   = Path.home() / ".config" / "cc-token-stats" / ".update.log"
-DIAG_LOG_FILE     = Path.home() / ".config" / "cc-token-stats" / ".diag.log"
+UPDATE_CHECK_FILE    = Path.home() / ".config" / "cc-token-stats" / ".last_update_check"
+UPDATE_LOG_FILE      = Path.home() / ".config" / "cc-token-stats" / ".update.log"
+UPDATE_NOTIFIED_FILE = Path.home() / ".config" / "cc-token-stats" / ".update.notified"
+DIAG_LOG_FILE        = Path.home() / ".config" / "cc-token-stats" / ".diag.log"
 
 def _log_update(msg):
     """Append a timestamped line to the update log; rotate if > 50 KB."""
@@ -618,6 +619,63 @@ def _log_update(msg):
     except OSError:
         # Log write itself failed (disk full, perms). Nothing sane to do.
         pass
+
+def _update_failure_streak():
+    """Count consecutive auto_update failures from the tail of UPDATE_LOG_FILE.
+    Walks backwards until the first success marker or BOF. Returns 0 when
+    everything is fine, or N where N days-ago was the most recent success.
+    Parses existing log format — no change to auto_update() needed, so this
+    can't regress the updater itself."""
+    if not UPDATE_LOG_FILE.is_file():
+        return 0
+    try:
+        lines = UPDATE_LOG_FILE.read_text().splitlines()
+    except OSError:
+        return 0
+    n = 0
+    for line in reversed(lines):
+        # Success markers written by auto_update: "updated X → Y",
+        # "check OK: up-to-date", "check OK: local >= remote".
+        if " updated " in line or "check OK" in line:
+            return n
+        # Failure markers: any "failed" / "error:" / "mismatch" / "short write".
+        if "failed" in line or "error:" in line or "mismatch" in line or "short write" in line:
+            n += 1
+    return n
+
+def _maybe_warn_update_stuck():
+    """If auto_update has failed 3+ times in a row, return a '⚠️ ' prefix
+    for the menu title AND fire a one-shot macOS notification (dedup'd so
+    we don't spam every 5 min). Returns empty string when healthy.
+
+    Three consecutive failures at the 24h cadence = plugin stuck for 3 days.
+    Users never look at ~/.config/cc-token-stats/.update.log so without this
+    surface, a broken updater is invisible until a feature goes missing
+    (as happened 2026-04-24 — a colleague was 4+ days stale and only noticed
+    because two menu items were absent)."""
+    streak = _update_failure_streak()
+    if streak < 3:
+        # Reset notify-marker on recovery so the next stuck streak warns again
+        if streak == 0 and UPDATE_NOTIFIED_FILE.is_file():
+            try: UPDATE_NOTIFIED_FILE.unlink()
+            except OSError: pass
+        return ""
+    try:
+        last = int(UPDATE_NOTIFIED_FILE.read_text().strip()) if UPDATE_NOTIFIED_FILE.is_file() else 0
+    except (OSError, ValueError):
+        last = 0
+    if streak > last:
+        _notify(
+            "cc-token-stats auto-update stuck",
+            f"{streak} consecutive failed update checks. Run in Terminal: "
+            f"curl -fsSL {REPO_URL}/install.sh | bash"
+        )
+        try:
+            UPDATE_NOTIFIED_FILE.parent.mkdir(parents=True, exist_ok=True)
+            UPDATE_NOTIFIED_FILE.write_text(str(streak))
+            UPDATE_NOTIFIED_FILE.chmod(0o600)
+        except OSError: pass
+    return "⚠️ "
 
 def _log_diag(where, err):
     """Record an unexpected exception with location tag + full traceback.
@@ -2610,8 +2668,14 @@ def main():
     # ═══════════════════════════════════════════════════════════════
     # LAYOUT: Limits → Today → Overview → ROI → Details → Machines
     # ═══════════════════════════════════════════════════════════════
+    # v1.5.11: expose running version in the dropdown title line + surface
+    # auto_update failure streak (>=3) with a ⚠️ prefix so users who never
+    # open the update log can see at a glance that they're stuck on an old
+    # build. The warning also fires a one-shot macOS notification (dedup'd
+    # inside _maybe_warn_update_stuck).
     title = t("title")
-    print(f"{title} | {H1}")
+    stuck_prefix = _maybe_warn_update_stuck()
+    print(f"{stuck_prefix}{title}  v{VERSION} | {H1}")
 
     W = 30  # total line display width for aligned rows
     def rj(label, val):
