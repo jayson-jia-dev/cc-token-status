@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.17"
+VERSION = "1.5.18"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -3228,6 +3228,9 @@ def main():
             # the label and the bar. dw() gives the true visual width.
             pad = " " * max(10 - dw(label), 1)
             print(f"--{label}{pad}{b} {v:>2}/20 | {ROW2}")
+
+        _host_label = "本机统计" if LANG == "zh" else "This machine"
+        print(f"--{_host_label}: {socket.gethostname()} | {DIM}")
 
         if _next_threshold:
             _gap = _next_threshold - _score

@@ -72,7 +72,7 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 | **Extra Usage** | Shows extra usage gauge with spent amount, monthly limit, and on/off status when enabled |
 | **Session Retention Protection** | Claude Code by default silently deletes `~/.claude/projects/**/*.jsonl` older than 30 days, wiping your cost history. On every refresh we patch `cleanupPeriodDays` to `99999` so your data stays put. [Background](https://simonwillison.net/2025/Oct/22/claude-code-logs/) |
 | **Accurate Cost (msg.id dedup)** | Claude Code re-logs the same API response on session resume/continue. Without dedup, cost inflates 40–80%. Plugin deduplicates globally by `msg.id` so numbers match Anthropic's billing |
-| **Fleet Aggregation** | With iCloud sync, menu's Daily / Hourly / Projects / Models panels aggregate across all your Macs. Only the Machines panel breaks down per-device |
+| **Fleet Aggregation** | With iCloud sync, menu's Daily / Hourly / Projects / Models panels aggregate across all your Macs. The Machines panel and User Level (per-machine, hostname shown on card & submenu) stay per-device |
 | **TTL-Aware Cache Pricing** | Reads `usage.cache_creation.ephemeral_{5m,1h}_input_tokens` and prices each TTL at its official rate ($×1.25 for 5m, $×2 for 1h) |
 | **Auto-Update** | Daily background check + on-demand "Manual Update" menu button. SHA256-verified, proxy-aware (system HTTP/HTTPS proxy), downgrade-protected, atomic replace, self-heals stray plugin copies on every run |
 | **5 Languages** | EN, 中文, ES, FR, 日本語 — auto-detected from system |
