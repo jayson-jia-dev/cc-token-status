@@ -61,8 +61,9 @@ No dependencies to install manually. SwiftBar is auto-installed if missing.
 | **Cost & Token Overview** | API-equivalent cost, session count, total tokens with input/output/cache breakdown |
 | **Today + Trend** | Today's spending with trend vs 30-day active-day average (↑12% when above average) |
 | **Subscription ROI** | How much your Pro/Max/Team plan saves vs API pricing, with daily/monthly projections |
-| **User Level** | 🌑→🌒→🌓→🌔→🌕→👑 rank with progress bar and upgrade hints |
-| **Visual Dashboard** | Click to open 12-panel ECharts report in browser: cost trend, model distribution, hourly activity, project ranking, token composition, rate limit gauges, machine comparison, daily detail table |
+| **User Level** | 🌑→🌒→🌓→🌔→🌕→👑 rank with progress bar and upgrade hints. Hostname shown on level card and submenu so you know which Mac the stats reflect |
+| **Achievement Badges** | 25+ badges across cost milestones (\$100 Club → \$1M Club) and behavior (Night Owl, Opus Devotee, Cache Master, Marathon Session, Multi-Project, etc.). Locked badges show desaturated icons with hover tooltip explaining unlock condition |
+| **Visual Dashboard** | Click to open 12-panel ECharts report in browser: cost trend, model distribution, hourly activity, project ranking, token composition, rate limit gauges, machine comparison, daily detail table. Robust to `.html` file-association hijacks (VS Code etc.) |
 | **Daily Details** | Full cost history (newest first, older dates collapsible) |
 | **Model Breakdown** | Per-model usage (Opus / Sonnet / Haiku) with percentages |
 | **Hourly Activity** | Sparkline charts: `▅▇██▇▄` shows which hours you're most active |
@@ -106,8 +107,10 @@ Scored across 5 dimensions (100 points total):
 │   ↓                                                              │
 │  cc-token-stats.5m.py                                            │
 │   ├─ ensure_cleanup_disabled() → patch cleanupPeriodDays → 99999 │
-│   ├─ scan()        → parse ~/.claude/projects/*/*.jsonl          │
-│   │                  (msg.id dedup + TTL-aware pricing           │
+│   ├─ scan()        → parse ~/.claude/projects/**/*.jsonl         │
+│   │                  (recurses into subagents/ — most parsers    │
+│   │                   miss this and lose ~50% of history;        │
+│   │                   msg.id dedup + TTL-aware pricing           │
 │   │                   + incremental mtime fingerprint cache)     │
 │   ├─ get_usage()   → Anthropic OAuth API (9-min fresh, 2h stale) │
 │   │                  ↳ macOS Keychain → OAuth token              │
@@ -119,7 +122,7 @@ Scored across 5 dimensions (100 points total):
 ```
 
 - **Session retention protection** — before anything else, patches `~/.claude/settings.json` so Claude Code's 30-day default auto-deletion can't wipe your cost history
-- **Token & cost** — scans Claude Code JSONL session logs with incremental caching (only re-parses changed files), globally deduplicates by Anthropic `msg.id` so session resume/continue rewrites are counted once, splits cache-write pricing by TTL (`ephemeral_5m` × 1.25 vs `ephemeral_1h` × 2 of input rate)
+- **Token & cost** — recurses `~/.claude/projects/**/*.jsonl` so Task-tool subagent sessions (under `subagents/`) are counted, not silently dropped like in most parsers. Globally deduplicates by Anthropic `msg.id` so session resume/continue rewrites are counted once. Splits cache-write pricing by TTL (`ephemeral_5m` × 1.25 vs `ephemeral_1h` × 2 of input rate). Incremental mtime fingerprint cache only re-parses changed files
 - **Plan limits** — reads OAuth token from macOS Keychain, queries `api.anthropic.com/api/oauth/usage` with smart caching (9-min fresh + 2-hour stale fallback, HTTP 429 graceful degradation)
 - **Rate-limit alerts** — one notification per escalation per limit-type; `state = {limit_key: {tier, at}}` survives 5h/7d window rollovers so the same threshold doesn't re-fire. Burn-rate prediction suppressed once already blocked
 - **Auto-update** — daily GitHub check with SHA256 verification, atomic tmp+rename, system proxy fallback, downgrade-protected; failures logged to `~/.config/cc-token-stats/.update.log` for diagnosis
@@ -164,7 +167,7 @@ Three paths, same SHA256 verification and atomic replace:
 
 ### Stuck on an old version?
 
-The dropdown title shows your current version (e.g. `v1.5.11`). If auto-update has silently failed for 3+ days, a `⚠️` appears in the title and you'll get a one-shot macOS notification. To force-repair from any state:
+The dropdown title shows your current version (e.g. `v1.5.18`). If auto-update has silently failed for 3+ days, a `⚠️` appears in the title and you'll get a one-shot macOS notification. To force-repair from any state:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main/install.sh | bash
