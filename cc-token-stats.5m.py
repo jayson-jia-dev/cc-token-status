@@ -10,7 +10,7 @@ cc-token-status — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token-status
 """
 
-VERSION = "1.5.18"
+VERSION = "1.5.19"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token-status/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -470,7 +470,7 @@ def calc_user_level():
     ]
 
     # 4. Automation (20pts) — self-built weighted
-    _fp = ("gsd","jjx","rn-","claude-","commit-","code-review","pr-review","understand","smart-",
+    _fp = ("gsd","rn-","claude-","commit-","code-review","pr-review","understand","smart-",
            "mem-","workflow-","using-","test-","systematic","verification","receiving-","requesting-",
            "writing-","log-","dispatching","executing-","finishing-","subagent","brainstorming","planning-")
     _cmddir = os.path.join(_cd, "commands")
@@ -506,7 +506,7 @@ def calc_user_level():
     else:          _h_hk_zh, _h_hk_en = "在 settings.json 配 1 个 hook 可 +3", "add 1 hook in settings.json for +3"
     _ratio_factor = 0.3 + 0.7 * _sr
     breakdown["automation"] = [
-        {"label_zh": "自建 commands（已排除 gsd/jjx 等框架前缀）", "label_en": "Self-built commands (framework prefixes excluded)",
+        {"label_zh": "自建 commands（已排除 gsd 等框架前缀）", "label_en": "Self-built commands (framework prefixes excluded)",
          "value_zh": f"{_nsc} 个自建 / 共 {len(_ac)} 个 commands",
          "value_en": f"{_nsc} self-built of {len(_ac)} total",
          "points": s4_raw_cmd, "max": 14,
