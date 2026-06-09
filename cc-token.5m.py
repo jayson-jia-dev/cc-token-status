@@ -10,7 +10,7 @@ cc-token — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token
 """
 
-VERSION = "1.6.4"
+VERSION = "1.6.5"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -1357,7 +1357,7 @@ def _file_fingerprints(base):
             except OSError: pass
     return fps
 
-SCAN_CACHE_SCHEMA = "msgid-dedup-v3-perday-sess"  # bump when scan-result semantics change (v2: per-day sessions kept by top cost, not scan order)
+SCAN_CACHE_SCHEMA = "msgid-dedup-v4-sess-tokens"  # bump when scan-result semantics change (v2: per-day sessions kept by top cost, not scan order)
 
 def _load_scan_cache(base, today_str):
     """Return cached scan result if all files unchanged and same day.
@@ -1569,8 +1569,8 @@ def scan():
                                 # to its own day so per-day session rows sum to
                                 # the day total (cross-midnight/multi-day safe).
                                 _b = sess_days.get(msg_date)
-                                if _b is None: _b = sess_days[msg_date] = {"cost": 0.0, "msgs": 0, "models": {}}
-                                _b["cost"] += mc; _b["msgs"] += 1
+                                if _b is None: _b = sess_days[msg_date] = {"cost": 0.0, "msgs": 0, "tokens": 0, "models": {}}
+                                _b["cost"] += mc; _b["msgs"] += 1; _b["tokens"] += total_t
                                 if m and m != "<synthetic>":
                                     _b["models"][m] = _b["models"].get(m, 0) + 1
 
@@ -1617,7 +1617,7 @@ def scan():
                         s["daily"][_sd]["sessions"] = s["daily"][_sd].get("sessions", 0) + 1
                         _dm = max(_b["models"], key=_b["models"].get) if _b["models"] else ""
                         s["sessions_by_day"][_sd].append({"project": proj_name, "cost": round(_b["cost"], 2),
-                                          "msgs": _b["msgs"], "model": model_short(_dm)})
+                                          "msgs": _b["msgs"], "tokens": _b["tokens"], "model": model_short(_dm)})
             except (OSError, UnicodeError) as e:
                 # UnicodeError belt-and-suspenders: open() already uses
                 # errors="replace" so decode never raises during iteration,
@@ -2208,7 +2208,7 @@ $('h2').textContent=t('model');
 // Newest version per family stays brightest; older versions step into darker
 // shades. Unknown variants fall back to the family's base color.
 const MODEL_COLORS={
-'Opus 4.7':'#c4a4f9','Opus 4.6':'#a371f7','Opus 4.5':'#7548c4',
+'Opus 4.8':'#d8c7fd','Opus 4.7':'#b98ff5','Opus 4.6':'#9163e8','Opus 4.5':'#7548c4',
 'Sonnet 4.6':'#7cc1ff','Sonnet 4.5':'#58a6ff',
 'Haiku 4.5':'#56d364','Haiku 3.5':'#3fb950'
 };
@@ -2362,19 +2362,22 @@ etd.style.cssText='padding:8px 8px 8px 24px;color:#484f58;font-style:italic;bord
 }else{
 [{v:'\u25b6 '+d.slice(5),a:'left'},{v:fc(row.cost||0),a:'right'},{v:(row.msgs||0).toLocaleString(),a:'right'},{v:fk(row.tokens||0),a:'right'}].forEach(function(c){
 var td=tr.insertCell();td.textContent=c.v;td.style.cssText='padding:5px 8px;border-bottom:1px solid #21262d;color:#c9d1d9;text-align:'+c.a;});
-if(hasSess){var shownC=0,shownM=0;sessions[d].forEach(function(s){
-shownC+=(s.cost||0);shownM+=(s.msgs||0);
+if(hasSess){var shownC=0,shownM=0,shownT=0;sessions[d].forEach(function(s){
+shownC+=(s.cost||0);shownM+=(s.msgs||0);shownT+=(s.tokens||0);
 var sr=tbody.insertRow();sr.style.display='none';sr.setAttribute('data-parent',d);
-[{v:'  '+(s.project||'\u2014'),a:'left'},{v:fc(s.cost||0),a:'right'},{v:s.msgs||0,a:'right'},{v:s.model||'\u2014',a:'right'}].forEach(function(c){
+// col4 is Tokens (matches the header). Model is appended to the project cell
+// so the column stays consistent. Older remote rows lack s.tokens \u2192 show \u2014.
+var proj='  '+(s.project||'\u2014')+(s.model?('  \u00b7 '+s.model):'');
+[{v:proj,a:'left'},{v:fc(s.cost||0),a:'right'},{v:s.msgs||0,a:'right'},{v:(s.tokens?fk(s.tokens):'\u2014'),a:'right'}].forEach(function(c){
 var td=sr.insertCell();td.textContent=c.v;td.style.cssText='padding:3px 8px;border-bottom:1px solid #1a1f26;color:#8b949e;text-align:'+c.a+';font-size:11px';});});
 // Reconciliation row: sessions are capped at top-30-by-cost, so on busy days
 // the listed rows don't sum to the day header. Surface the remainder so the
 // detail always reconciles to the day total instead of looking broken.
-var remN=(row.sessions||0)-sessions[d].length,remC=(row.cost||0)-shownC,remM=(row.msgs||0)-shownM;
+var remN=(row.sessions||0)-sessions[d].length,remC=(row.cost||0)-shownC,remM=(row.msgs||0)-shownM,remT=(row.tokens||0)-shownT;
 if(remN>0||remM>0||remC>0.005){
 var rr=tbody.insertRow();rr.style.display='none';rr.setAttribute('data-parent',d);
 var rlabel=zh?('  \u5176\u4f59'+(remN>0?(' '+remN+' \u4e2a'):'')+'\u4f1a\u8bdd'):('  +'+(remN>0?remN:'')+' more sessions');
-[{v:rlabel,a:'left'},{v:fc(remC>0?remC:0),a:'right'},{v:(remM>0?remM:0).toLocaleString(),a:'right'},{v:'\u2014',a:'right'}].forEach(function(c){
+[{v:rlabel,a:'left'},{v:fc(remC>0?remC:0),a:'right'},{v:(remM>0?remM:0).toLocaleString(),a:'right'},{v:(remT>0?fk(remT):'\u2014'),a:'right'}].forEach(function(c){
 var td=rr.insertCell();td.textContent=c.v;td.style.cssText='padding:3px 8px;border-bottom:1px solid #1a1f26;color:#6e7681;font-style:italic;text-align:'+c.a+';font-size:11px';});}}
 else{var nr=tbody.insertRow();nr.style.display='none';nr.setAttribute('data-parent',d);
 var ntd=nr.insertCell();ntd.colSpan=4;ntd.textContent=zh?'无 Session 明细（来自远程同步）':'No session details (from remote sync)';
