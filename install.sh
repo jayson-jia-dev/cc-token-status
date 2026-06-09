@@ -67,7 +67,12 @@ if [ -z "$PLUGIN_DIR" ]; then
 fi
 
 # ─── 4. Clean up old/conflicting plugins ───
-for old in "$PLUGIN_DIR"/ccpeek* "$PLUGIN_DIR"/cc-pulse*; do
+# Includes the pre-1.6.0 canonical names cc-token-stats/-status.5m.py: the
+# rename changed the plugin filename, so without this an upgrading user keeps
+# the old file too → two menu-bar icons, doubled API polling, doubled updates.
+for old in "$PLUGIN_DIR"/ccpeek* "$PLUGIN_DIR"/cc-pulse* \
+           "$PLUGIN_DIR"/cc-token-stats.5m.py "$PLUGIN_DIR"/cc-token-stats.5m.py.* \
+           "$PLUGIN_DIR"/cc-token-status.5m.py "$PLUGIN_DIR"/cc-token-status.5m.py.*; do
     [ -f "$old" ] && rm -f "$old" && echo "✓ Removed: $(basename "$old")"
 done
 

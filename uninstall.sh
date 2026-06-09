@@ -5,17 +5,21 @@ set -euo pipefail
 echo "cc-token uninstaller"
 echo ""
 
-# 1. Remove plugin
+# 1. Remove plugin (incl. pre-1.6.0 legacy filenames + .bak derivatives)
 PLUGIN_DIR=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "$HOME/Library/Application Support/SwiftBar/plugins")
-rm -f "$PLUGIN_DIR/cc-token.5m.py"
+rm -f "$PLUGIN_DIR/cc-token.5m.py" \
+      "$PLUGIN_DIR"/cc-token-stats.5m.py "$PLUGIN_DIR"/cc-token-stats.5m.py.* \
+      "$PLUGIN_DIR"/cc-token-status.5m.py "$PLUGIN_DIR"/cc-token-status.5m.py.*
 echo "✓ Plugin removed"
 
-# 2. Remove config and cache
-rm -rf ~/.config/cc-token
+# 2. Remove config and cache (new path + pre-1.6.0 legacy path)
+rm -rf ~/.config/cc-token ~/.config/cc-token-stats ~/.config/cc-token-status
 echo "✓ Config removed"
 
-# 3. iCloud sync data
+# 3. iCloud sync data (check legacy path too, in case migration never ran)
 ICLOUD_DIR="$HOME/Library/Mobile Documents/com~apple~CloudDocs/cc-token"
+ICLOUD_LEGACY="$HOME/Library/Mobile Documents/com~apple~CloudDocs/cc-token-stats"
+[ -d "$ICLOUD_DIR" ] || { [ -d "$ICLOUD_LEGACY" ] && ICLOUD_DIR="$ICLOUD_LEGACY"; }
 if [ -d "$ICLOUD_DIR" ]; then
     echo ""
     echo "iCloud sync data found at:"
