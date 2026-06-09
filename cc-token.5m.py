@@ -10,7 +10,7 @@ cc-token — Claude Code usage dashboard in your menu bar.
 https://github.com/jayson-jia-dev/cc-token
 """
 
-VERSION = "1.6.5"
+VERSION = "1.6.6"
 REPO_URL = "https://raw.githubusercontent.com/jayson-jia-dev/cc-token/main"
 
 import json, os, glob, shlex, socket, subprocess, sys
@@ -2171,6 +2171,12 @@ const C={p:'#58a6ff',t:'#58d4ab',g:'#d4a04a',d:'#f85149',w:'#d29922',op:'#a371f7
 const tt={backgroundColor:'#1c2128',borderColor:'#30363d',textStyle:{color:'#c9d1d9'}};
 const ax={axisLine:{lineStyle:{color:'#30363d'}},splitLine:{lineStyle:{color:'#21262d'}},axisLabel:{color:'#8b949e',fontSize:10}};
 const $=id=>document.getElementById(id);
+// Global HTML escaper — used across multiple panels (Usage Wrapped, etc.).
+// Previously esc() was only defined locally inside a few IIFEs, so an
+// esc() call in a panel without its own copy threw ReferenceError and
+// halted every panel after it (the Usage Wrapped / ROI / machines cards
+// rendered blank). Hoisting one global fixes all call sites.
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // Header
 $('T').textContent=t('title');$('G').textContent=D.generated;
